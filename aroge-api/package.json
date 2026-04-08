@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch -r tsconfig-paths/register src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
@@ -14,7 +14,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@hono/node-server": "^1.19.13",
     "@prisma/client": "^7.7.0",
@@ -22,6 +22,7 @@
     "dotenv": "^17.4.1",
     "hono": "^4.12.12",
     "ioredis": "^5.10.1",
+    "tsconfig-paths": "^4.2.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
