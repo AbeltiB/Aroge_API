@@ -2,13 +2,14 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    //"baseUrl": ".",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["src/*"]
     },
     "esModuleInterop": true,
     "module": "nodenext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "nodenext",
     "target": "esnext",
     "lib": ["esnext"],
     "types": ["node"],
