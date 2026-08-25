@@ -1,0 +1,605 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  RESERVED
+  SOLD
+  ARCHIVED
+  FLAGGED
+}
+
+enum ItemCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COUNTERED
+  EXPIRED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID_ESCROWED
+  IN_TRANSIT
+  MEETUP_ARRANGED
+  DELIVERED
+  COMPLETED
+  DISPUTED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  HELD
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+enum DeliveryStatus {
+  PENDING_APPROVAL
+  REJECTED
+  REQUESTED
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+enum EscrowEventType {
+  HELD
+  RELEASED
+  AUTO_RELEASED
+  DISPUTED
+  ADMIN_DECISION
+  REFUNDED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR
+  SUPPORT
+}
+
+enum DeliveryMethod {
+  AROGE_DELIVERY
+  MEETUP
+}
+
+enum PaymentGateway {
+  TELEBIRR
+  CBE_BIRR
+  BANK_TRANSFER
+}
+
+enum FeeType {
+  PERCENTAGE
+  FLAT
+}
+
+enum FeeVisibility {
+  BUYER
+  SELLER
+  BOTH
+}
+
+enum ReportTarget {
+  LISTING
+  USER
+  MESSAGE
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                  String    @id @default(uuid())
+  telegramId          String    @unique @map("telegram_id")
+  name                String
+  avatarUrl           String?   @map("avatar_url")
+  city                String?
+  subCity             String?   @map("sub_city")
+  verified            Boolean   @default(false)
+  expoPushToken       String?   @map("expo_push_token")
+  isTrusted           Boolean   @default(false) @map("is_trusted")
+  trustedAt           DateTime? @map("trusted_at")
+  trustedGrantedBy    String?   @map("trusted_granted_by")
+  badgePendingReview  Boolean   @default(false) @map("badge_pending_review")
+  holidayMode         Boolean   @default(false) @map("holiday_mode")
+  holidayModeCount    Int       @default(0)     @map("holiday_mode_count")
+  holidayModeAt       DateTime?                 @map("holiday_mode_at")
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  businesses       Business[]
+  listings         Listing[]
+  bundles          Bundle[]
+  buyerOrders      Order[]           @relation("BuyerOrders")
+  sellerOrders     Order[]           @relation("SellerOrders")
+  sentMessages     Message[]         @relation("SentMessages")
+  receivedMessages Message[]         @relation("ReceivedMessages")
+  buyerOffers      Offer[]
+  savedItems       SavedItem[]
+  following        Follow[]          @relation("Follower")
+  followers        Follow[]          @relation("Followed")
+  notifications    Notification[]
+  givenReviews     Review[]          @relation("ReviewerReviews")
+  receivedReviews  Review[]          @relation("RevieweeReviews")
+  holidayModeLogs  HolidayModeLog[]
+  blockedUsers     Block[]           @relation("Blocker")
+  blockedByUsers   Block[]           @relation("Blocked")
+  reports          Report[]
+
+  @@map("users")
+}
+
+model AdminUser {
+  id         String    @id @default(uuid())
+  telegramId String    @unique @map("telegram_id")
+  role       AdminRole @default(MODERATOR)
+  name       String
+  avatarUrl  String?   @map("avatar_url")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  adminActions AdminAction[]
+  broadcasts   AdminBroadcast[]
+
+  @@map("admin_users")
+}
+
+model Business {
+  id         String    @id @default(uuid())
+  repUserId  String    @map("rep_user_id")
+  name       String
+  type       String
+  licenseUrl String?   @map("license_url")
+  tin        String?
+  city       String?
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  rep      User      @relation(fields: [repUserId], references: [id])
+  listings Listing[]
+
+  @@map("businesses")
+}
+
+model Category {
+  id       String     @id @default(uuid())
+  parentId String?    @map("parent_id")
+  nameEn   String     @map("name_en")
+  nameAm   String     @map("name_am")
+  slug     String     @unique
+  iconKey  String?    @map("icon_key")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  listings Listing[]
+
+  @@map("categories")
+}
+
+model Listing {
+  id          String        @id @default(uuid())
+  sellerId    String        @map("seller_id")
+  businessId  String?       @map("business_id")
+  title       String
+  description String
+  categoryId  String        @map("category_id")
+  condition   ItemCondition
+  price       Float
+  negotiable  Boolean       @default(false)
+  status      ListingStatus @default(DRAFT)
+  city        String?
+  subCity     String?       @map("sub_city")
+  deletedAt   DateTime?     @map("deleted_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  seller   User      @relation(fields: [sellerId], references: [id])
+  business Business? @relation(fields: [businessId], references: [id])
+  category Category  @relation(fields: [categoryId], references: [id])
+  photos   ListingPhoto[]
+  offers   Offer[]
+  orders   Order[]
+  messages Message[]
+  savedBy  SavedItem[]
+  bundleItems BundleItem[]
+
+  @@map("listings")
+}
+
+model ListingPhoto {
+  id           String  @id @default(uuid())
+  listingId    String  @map("listing_id")
+  cloudinaryKey String @map("cloudinary_key")
+  orderIndex   Int     @map("order_index")
+  isPrimary    Boolean @default(false) @map("is_primary")
+
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@map("listing_photos")
+}
+
+model Offer {
+  id            String      @id @default(uuid())
+  listingId     String      @map("listing_id")
+  buyerId       String      @map("buyer_id")
+  amount        Float
+  status        OfferStatus @default(PENDING)
+  parentOfferId String?     @map("parent_offer_id")
+  expiresAt     DateTime    @map("expires_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  listing     Listing  @relation(fields: [listingId], references: [id])
+  buyer       User     @relation(fields: [buyerId], references: [id])
+  parentOffer Offer?   @relation("OfferChain", fields: [parentOfferId], references: [id])
+  counters    Offer[]  @relation("OfferChain")
+
+  @@map("offers")
+}
+
+model Bundle {
+  id        String        @id @default(uuid())
+  sellerId  String        @map("seller_id")
+  price     Float
+  status    ListingStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  seller User         @relation(fields: [sellerId], references: [id])
+  items  BundleItem[]
+  orders Order[]
+
+  @@map("bundles")
+}
+
+model BundleItem {
+  bundleId  String @map("bundle_id")
+  listingId String @map("listing_id")
+
+  bundle  Bundle  @relation(fields: [bundleId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@id([bundleId, listingId])
+  @@map("bundle_items")
+}
+
+model Order {
+  id              String         @id @default(uuid())
+  listingId       String?        @map("listing_id")
+  bundleId        String?        @map("bundle_id")
+  buyerId         String         @map("buyer_id")
+  sellerId        String         @map("seller_id")
+  amount          Float
+  deliveryFee     Float          @default(0) @map("delivery_fee")
+  deliveryMethod  DeliveryMethod @map("delivery_method")
+  paymentMethod   PaymentGateway @map("payment_method")
+  orderStatus     OrderStatus    @default(PENDING_PAYMENT) @map("order_status")
+  paymentStatus   PaymentStatus  @default(PENDING) @map("payment_status")
+  serviceFee      Float          @default(0) @map("service_fee")
+  feeSnapshot     Json?          @map("fee_snapshot")
+  idempotencyKey  String         @unique @map("idempotency_key")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  listing       Listing?       @relation(fields: [listingId], references: [id])
+  bundle        Bundle?        @relation(fields: [bundleId], references: [id])
+  buyer         User           @relation("BuyerOrders", fields: [buyerId], references: [id])
+  seller        User           @relation("SellerOrders", fields: [sellerId], references: [id])
+  payment       Payment?
+  escrowEvents  EscrowEvent[]
+  delivery      Delivery?
+  reviews       Review[]
+
+  @@map("orders")
+}
+
+model Payment {
+  id              String         @id @default(uuid())
+  orderId         String         @unique @map("order_id")
+  gateway         PaymentGateway
+  gatewayRef      String?        @map("gateway_ref")
+  idempotencyKey  String         @unique @map("idempotency_key")
+  amount          Float
+  status          PaymentStatus  @default(PENDING)
+  proofKey        String?        @map("proof_key")
+  proofUploadedAt DateTime?      @map("proof_uploaded_at")
+
+  // verify.et automatic reference-number verification (BANK_TRANSFER only).
+  // verifiedBank+verifiedReference carry a global unique constraint below as a
+  // defense-in-depth anti-replay check, independent of verify.et's own
+  // confirmationHistory tracking — the same bank receipt can never confirm
+  // two different Aroge payments even if the upstream check is ever wrong.
+  verifyRequestId  String?   @unique @map("verify_request_id")
+  verifiedBank     String?   @map("verified_bank")
+  verifiedReference String? @map("verified_reference")
+  verificationRaw  Json?     @map("verification_raw")
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@unique([verifiedBank, verifiedReference])
+  @@map("payments")
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  bankName      String   @map("bank_name")
+  // verify.et's bank key (cbe, boa, telebirr, mpesa, cbebirr, dashen, awash,
+  // siinqee, kaafiebirr) — drives which fields checkout asks for and which
+  // bank we submit to verify.et for automatic reference verification.
+  bankCode      String   @map("bank_code")
+  accountName   String   @map("account_name")
+  accountNumber String   @map("account_number")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("bank_accounts")
+}
+
+model EscrowEvent {
+  id        String          @id @default(uuid())
+  orderId   String          @map("order_id")
+  eventType EscrowEventType @map("event_type")
+  amount    Float
+  actorId   String?         @map("actor_id")
+  note      String?
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("escrow_events")
+}
+
+model Delivery {
+  id              String         @id @default(uuid())
+  orderId         String         @unique @map("order_id")
+  courierPartner  String         @default("aroge-logistics") @map("courier_partner")
+  courierRef      String?        @map("courier_ref")
+  pickupAddress   String         @default("") @map("pickup_address")
+  dropoffAddress  String         @default("") @map("dropoff_address")
+  fee             Float
+  status          DeliveryStatus @default(PENDING_APPROVAL)
+  approvedById    String?        @map("approved_by_id")
+  approvedAt      DateTime?      @map("approved_at")
+  rejectedReason  String?        @map("rejected_reason")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("deliveries")
+}
+
+model DeliverySettings {
+  id        String   @id @default("default")
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  fee       Float    @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("delivery_settings")
+}
+
+model Message {
+  id         String    @id @default(uuid())
+  listingId  String    @map("listing_id")
+  senderId   String    @map("sender_id")
+  receiverId String    @map("receiver_id")
+  body       String
+  mediaKey   String?   @map("media_key")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  listing  Listing @relation(fields: [listingId], references: [id])
+  sender   User    @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User    @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([listingId, senderId, receiverId])
+  @@map("messages")
+}
+
+model Review {
+  id          String    @id @default(uuid())
+  orderId     String    @map("order_id")
+  reviewerId  String    @map("reviewer_id")
+  revieweeId  String    @map("reviewee_id")
+  rating      Int
+  comment     String?
+  revealedAt  DateTime? @map("revealed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  order    Order @relation(fields: [orderId], references: [id])
+  reviewer User  @relation("ReviewerReviews", fields: [reviewerId], references: [id])
+  reviewee User  @relation("RevieweeReviews", fields: [revieweeId], references: [id])
+
+  @@map("reviews")
+}
+
+model SavedItem {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  listingId String   @map("listing_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@unique([userId, listingId])
+  @@map("saved_items")
+}
+
+model Follow {
+  id         String   @id @default(uuid())
+  followerId String   @map("follower_id")
+  followedId String   @map("followed_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  follower User @relation("Follower", fields: [followerId], references: [id])
+  followed User @relation("Followed", fields: [followedId], references: [id])
+
+  @@unique([followerId, followedId])
+  @@map("follows")
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id])
+  blocked User @relation("Blocked", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
+
+model Report {
+  id         String       @id @default(uuid())
+  reporterId String       @map("reporter_id")
+  targetType ReportTarget @map("target_type")
+  targetId   String       @map("target_id")
+  reason     String
+  status     ReportStatus @default(PENDING)
+  reviewedBy String?      @map("reviewed_by")
+  reviewedAt DateTime?    @map("reviewed_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  reporter User @relation(fields: [reporterId], references: [id])
+
+  @@map("reports")
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  type        String
+  channel     String    @default("IN_APP")
+  title       String    @default("")
+  body        String    @default("")
+  data        Json?
+  isPopup     Boolean   @default(false) @map("is_popup")
+  broadcastId String?   @map("broadcast_id")
+  readAt      DateTime? @map("read_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model AnalyticsSnapshot {
+  id          String   @id @default(uuid())
+  date        DateTime
+  dau         Int      @default(0)
+  mau         Int      @default(0)
+  gmv         Float    @default(0)
+  orderCount  Int      @default(0) @map("order_count")
+  disputeRate Float    @default(0) @map("dispute_rate")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("analytics_snapshots")
+}
+
+model AdminAction {
+  id         String   @id @default(uuid())
+  adminId    String   @map("admin_id")
+  actionType String   @map("action_type")
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@map("admin_actions")
+}
+
+model AdminBroadcast {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  channels    String[]
+  targetType  String    @map("target_type")
+  targetIds   String[]  @map("target_ids")
+  isPopup     Boolean   @default(false) @map("is_popup")
+  expiresAt   DateTime? @map("expires_at")
+  status      String    @default("QUEUED")
+  sentCount   Int       @default(0) @map("sent_count")
+  adminId     String    @map("admin_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@map("admin_broadcasts")
+}
+
+model BadgeCriteria {
+  id           String   @id @default("default")
+  minSales     Int      @default(5)   @map("min_sales")
+  minPurchases Int      @default(3)   @map("min_purchases")
+  requireBoth  Boolean  @default(false) @map("require_both")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("badge_criteria")
+}
+
+model PlatformFee {
+  id           String        @id @default(uuid())
+  name         String
+  type         FeeType
+  value        Float
+  visibleTo    FeeVisibility @map("visible_to")
+  isActive     Boolean       @default(true) @map("is_active")
+  displayOrder Int           @default(0) @map("display_order")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("platform_fees")
+}
+
+model HolidayModeLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  action    String   // "ON" | "OFF"
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("holiday_mode_logs")
+}

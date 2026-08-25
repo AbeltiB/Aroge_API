@@ -1,0 +1,60 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Connect this repo in the Render dashboard → "New Blueprint Instance"
+# Postgres and Redis are NOT Render-managed here — DATABASE_URL/REDIS_URL
+# point at Neon and Upstash instead (set as `sync: false` secrets after first
+# deploy): Render's free Postgres expires and gets deleted after ~30-90 days,
+# Neon/Upstash free tiers don't, and both speak the standard wire protocol so
+# no code changes are needed beyond the connection strings themselves.
+
+services:
+  - type: web
+    name: aroge-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:migrate
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      # Neon connection string — use the DIRECT (non-pooled) endpoint from
+      # Neon's dashboard, not the "-pooler" one: this is a long-running
+      # process with its own small Prisma pool, not serverless functions, so
+      # PgBouncer's transaction-mode pooling (and its prepared-statement
+      # caveat with Prisma) isn't needed here.
+      - key: DATABASE_URL
+        sync: false
+      # Upstash Redis — use the "rediss://" (TLS) connection string from the
+      # Upstash console, not the REST API URL.
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Fill these in the Render dashboard after first deploy:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: aroge_telegram_bot
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: VERIFY_ET_API_KEY
+        sync: false
+      - key: VERIFY_ET_BASE_URL
+        value: https://verify.et
+      - key: VERIFY_ET_WEBHOOK_SECRET
+        sync: false
+      # UptimeRobot (or similar) hits this every ~10 min so the free instance
+      # never spins down from inactivity. Shared secret query param stops
+      # randoms from hammering the DB/Redis-touching warm endpoint.
+      - key: WARM_PING_SECRET
+        generateValue: true
