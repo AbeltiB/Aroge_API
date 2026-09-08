@@ -1,7 +1,7 @@
 import { createMiddleware } from 'hono/factory'
 import { err } from '../lib/response.js'
 import type { AuthVariables } from './auth.js'
-import { AdminRole } from 'aroge-sdk'
+import { AdminRole } from '@arogenpm/sdk'
 
 /**
  * Restricts a route to specific admin roles. Must run after `adminOnly`.

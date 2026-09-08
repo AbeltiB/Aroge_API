@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { env } from '../config/env.js'
-import type { JwtPayload, JwtUserPayload, JwtAdminPayload } from 'aroge-sdk'
+import type { JwtPayload, JwtUserPayload, JwtAdminPayload } from '@arogenpm/sdk'
 
 const accessSecret = new TextEncoder().encode(env.JWT_ACCESS_SECRET)
 const refreshSecret = new TextEncoder().encode(env.JWT_REFRESH_SECRET)

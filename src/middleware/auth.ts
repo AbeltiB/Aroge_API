@@ -1,7 +1,7 @@
 import { createMiddleware } from 'hono/factory'
 import { verifyAccessToken } from '../lib/jwt.js'
 import { err } from '../lib/response.js'
-import type { JwtPayload } from 'aroge-sdk'
+import type { JwtPayload } from '@arogenpm/sdk'
 
 export type AuthVariables = {
   user: JwtPayload

@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { ApiSuccess, ApiError } from 'aroge-sdk'
+import type { ApiSuccess, ApiError } from '@arogenpm/sdk'
 
 export const ok = <T>(c: Context, data: T): Response =>
   c.json<ApiSuccess<T>>({ success: true, data })

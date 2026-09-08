@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { verifyPaymentReferenceSchema } from 'aroge-sdk'
+import { verifyPaymentReferenceSchema } from '@arogenpm/sdk'
 import { prisma } from '../lib/prisma.js'
 import { cloudinary } from '../lib/cloudinary.js'
 import { ok, err } from '../lib/response.js'

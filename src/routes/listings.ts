@@ -6,7 +6,7 @@ import { cloudinary } from '../lib/cloudinary.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { verifyAccessToken } from '../lib/jwt.js'
-import { createListingSchema, updateListingSchema, listingStatusSchema } from 'aroge-sdk'
+import { createListingSchema, updateListingSchema, listingStatusSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const listings = new Hono<{ Variables: AuthVariables }>()

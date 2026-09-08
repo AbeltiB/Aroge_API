@@ -1,1 +1,1 @@
-export { verifyTelegramAuth } from 'aroge-sdk'
+export { verifyTelegramAuth } from '@arogenpm/sdk'

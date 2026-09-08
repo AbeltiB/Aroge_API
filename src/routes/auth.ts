@@ -7,7 +7,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jw
 import { ok, err } from '../lib/response.js'
 import { env } from '../config/env.js'
 import { rateLimit } from '../middleware/rateLimit.js'
-import { telegramAuthSchema } from 'aroge-sdk'
+import { telegramAuthSchema } from '@arogenpm/sdk'
 
 const auth = new Hono()
 

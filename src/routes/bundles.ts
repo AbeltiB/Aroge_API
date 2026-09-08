@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { prisma } from '../lib/prisma.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
-import { createBundleSchema } from 'aroge-sdk'
+import { createBundleSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const bundles = new Hono<{ Variables: AuthVariables }>()

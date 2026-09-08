@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { NOTIFY } from '../lib/notify.js'
-import { createOfferSchema, offerActionSchema } from 'aroge-sdk'
+import { createOfferSchema, offerActionSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const offers = new Hono<{ Variables: AuthVariables }>()

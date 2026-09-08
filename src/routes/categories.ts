@@ -6,7 +6,7 @@ import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
-import { AdminRole } from 'aroge-sdk'
+import { AdminRole } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const categories = new Hono<{ Variables: AuthVariables }>()

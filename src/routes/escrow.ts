@@ -8,7 +8,7 @@ import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
 import { setOrderListingsStatus } from '../lib/orderListings.js'
-import { disputeSchema } from 'aroge-sdk'
+import { disputeSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const escrow = new Hono<{ Variables: AuthVariables }>()
