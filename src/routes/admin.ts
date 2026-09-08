@@ -375,6 +375,48 @@ admin.get('/disputes', async (c) => {
   return ok(c, { items, total, page, limit })
 })
 
+// ─── Review Moderation ───────────────────────────────────────────────────────
+// No prior admin visibility existed into buyer/seller star ratings and
+// comments at all — a fake or abusive review couldn't be seen or removed.
+
+admin.get('/reviews', async (c) => {
+  const page = Math.max(1, Number(c.req.query('page')) || 1)
+  const limit = Math.min(100, Number(c.req.query('limit')) || 30)
+  const skip = (page - 1) * limit
+  const maxRating = c.req.query('maxRating')
+
+  const where: any = {}
+  if (maxRating) where.rating = { lte: Number(maxRating) }
+
+  const [items, total] = await Promise.all([
+    prisma.review.findMany({
+      where,
+      include: {
+        reviewer: { select: { id: true, name: true } },
+        reviewee: { select: { id: true, name: true } },
+        order: { select: { id: true, listing: { select: { id: true, title: true } }, bundleId: true } },
+      },
+      skip, take: limit, orderBy: { createdAt: 'desc' },
+    }),
+    prisma.review.count({ where }),
+  ])
+  return ok(c, { items, total, page, limit })
+})
+
+admin.delete('/reviews/:id', requireRole(AdminRole.MODERATOR), async (c) => {
+  const adminId = c.get('userId')
+  const id = c.req.param('id')
+
+  const existing = await prisma.review.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Review not found', 404)
+
+  await prisma.review.delete({ where: { id } })
+  await prisma.adminAction.create({
+    data: { adminId, actionType: 'DELETE_REVIEW', targetType: 'review', targetId: id },
+  })
+  return ok(c, null)
+})
+
 admin.get('/businesses', async (c) => {
   const query = c.req.query()
   const unverifiedOnly = query.unverified === 'true'
