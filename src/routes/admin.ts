@@ -10,7 +10,7 @@ import { markPaymentHeld } from '../lib/markPaymentHeld.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
-import { AdminRole, bankAccountSchema } from '@arogenpm/sdk'
+import { AdminRole, bankAccountSchema, createAdminSchema, updateAdminRoleSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const feeSchema = z.object({
@@ -852,6 +852,74 @@ admin.delete('/bank-accounts/:id', requireRole(), async (c) => { // financial co
   const existing = await prisma.bankAccount.findUnique({ where: { id } })
   if (!existing) return err(c, 'Bank account not found', 404)
   await prisma.bankAccount.delete({ where: { id } })
+  return ok(c, null)
+})
+
+// ─── Admin User Management ───────────────────────────────────────────────────
+// Previously only possible via a CLI script (scripts/promote-admin.ts) — no
+// way to see, provision, or remove admin accounts from the dashboard itself.
+// SUPER_ADMIN only throughout: this controls who has admin power at all.
+
+admin.get('/admins', requireRole(), async (c) => {
+  const items = await prisma.adminUser.findMany({
+    select: { id: true, telegramId: true, name: true, role: true, avatarUrl: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  return ok(c, items)
+})
+
+admin.post('/admins', requireRole(), zValidator('json', createAdminSchema), async (c) => {
+  const adminId = c.get('userId')
+  const { telegramId, name, role } = c.req.valid('json')
+
+  const existing = await prisma.adminUser.findUnique({ where: { telegramId } })
+  if (existing) return err(c, 'This Telegram account is already an admin', 409)
+
+  const created = await prisma.adminUser.create({ data: { telegramId, name, role } })
+  await prisma.adminAction.create({
+    data: { adminId, actionType: 'CREATE_ADMIN', targetType: 'admin_user', targetId: created.id, reason: `role: ${role}` },
+  })
+  return ok(c, created)
+})
+
+admin.patch('/admins/:id/role', requireRole(), zValidator('json', updateAdminRoleSchema), async (c) => {
+  const adminId = c.get('userId')
+  const id = c.req.param('id')
+  const { role } = c.req.valid('json')
+
+  const existing = await prisma.adminUser.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Admin not found', 404)
+
+  if (existing.role === AdminRole.SUPER_ADMIN && role !== AdminRole.SUPER_ADMIN) {
+    const superAdminCount = await prisma.adminUser.count({ where: { role: AdminRole.SUPER_ADMIN } })
+    if (superAdminCount <= 1) return err(c, 'Cannot demote the only remaining SUPER_ADMIN', 400)
+  }
+
+  const updated = await prisma.adminUser.update({ where: { id }, data: { role } })
+  await prisma.adminAction.create({
+    data: { adminId, actionType: 'CHANGE_ADMIN_ROLE', targetType: 'admin_user', targetId: id, reason: `${existing.role} → ${role}` },
+  })
+  return ok(c, updated)
+})
+
+admin.delete('/admins/:id', requireRole(), async (c) => {
+  const adminId = c.get('userId')
+  const id = c.req.param('id')
+
+  if (id === adminId) return err(c, 'You cannot remove your own admin account', 400)
+
+  const existing = await prisma.adminUser.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Admin not found', 404)
+
+  if (existing.role === AdminRole.SUPER_ADMIN) {
+    const superAdminCount = await prisma.adminUser.count({ where: { role: AdminRole.SUPER_ADMIN } })
+    if (superAdminCount <= 1) return err(c, 'Cannot remove the only remaining SUPER_ADMIN', 400)
+  }
+
+  await prisma.adminUser.delete({ where: { id } })
+  await prisma.adminAction.create({
+    data: { adminId, actionType: 'REMOVE_ADMIN', targetType: 'admin_user', targetId: id },
+  })
   return ok(c, null)
 })
 
