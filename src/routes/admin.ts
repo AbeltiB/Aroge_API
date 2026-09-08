@@ -176,6 +176,106 @@ admin.patch('/listings/:id/restore', requireRole(AdminRole.MODERATOR), async (c)
   return ok(c, null)
 })
 
+// ─── Bundle Moderation ───────────────────────────────────────────────────────
+// Bundles previously only surfaced nested inside an order's detail view —
+// no standalone list/moderation existed the way Listings has. Bundle has no
+// deletedAt (unlike Listing), so "removed" is just status: ARCHIVED.
+
+admin.get('/bundles', async (c) => {
+  const query = c.req.query()
+  const status = (query.status as any) || 'ACTIVE'
+  const page = Math.max(1, Number(query.page) || 1)
+  const limit = Math.min(100, Number(query.limit) || 30)
+  const skip = (page - 1) * limit
+
+  const where: any = status === 'ALL' ? {} : { status }
+
+  const [items, total] = await Promise.all([
+    prisma.bundle.findMany({
+      where,
+      include: {
+        seller: { select: { id: true, name: true } },
+        items: { include: { listing: { select: { id: true, title: true } } } },
+      },
+      skip, take: limit, orderBy: { createdAt: 'desc' },
+    }),
+    prisma.bundle.count({ where }),
+  ])
+  return ok(c, { items, total, page, limit })
+})
+
+admin.patch('/bundles/:id/remove', requireRole(AdminRole.MODERATOR), async (c) => {
+  const adminId = c.get('userId')
+  const id = c.req.param('id')
+
+  const existing = await prisma.bundle.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Bundle not found', 404)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.bundle.update({ where: { id }, data: { status: 'ARCHIVED' as any } })
+    await tx.adminAction.create({
+      data: { adminId, actionType: 'REMOVE_BUNDLE', targetType: 'bundle', targetId: id },
+    })
+  })
+  return ok(c, null)
+})
+
+admin.patch('/bundles/:id/flag',
+  requireRole(AdminRole.MODERATOR),
+  zValidator('json', z.object({ reason: z.string().min(3).max(500).optional() })),
+  async (c) => {
+    const adminId = c.get('userId')
+    const id = c.req.param('id')
+    const { reason } = c.req.valid('json')
+
+    const existing = await prisma.bundle.findUnique({ where: { id } })
+    if (!existing) return err(c, 'Bundle not found', 404)
+    if (existing.status === 'FLAGGED') return err(c, 'Bundle is already flagged', 400)
+
+    await prisma.$transaction(async (tx) => {
+      await tx.bundle.update({ where: { id }, data: { status: 'FLAGGED' as any } })
+      await tx.adminAction.create({
+        data: { adminId, actionType: 'FLAG_BUNDLE', targetType: 'bundle', targetId: id, reason },
+      })
+    })
+    return ok(c, null)
+  }
+)
+
+admin.patch('/bundles/:id/approve', requireRole(AdminRole.MODERATOR), async (c) => {
+  const adminId = c.get('userId')
+  const id = c.req.param('id')
+
+  const existing = await prisma.bundle.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Bundle not found', 404)
+  if (existing.status !== 'FLAGGED') return err(c, 'Bundle is not currently flagged', 400)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.bundle.update({ where: { id }, data: { status: 'ACTIVE' as any } })
+    await tx.adminAction.create({
+      data: { adminId, actionType: 'APPROVE_BUNDLE', targetType: 'bundle', targetId: id },
+    })
+  })
+  return ok(c, null)
+})
+
+admin.patch('/bundles/:id/restore', requireRole(AdminRole.MODERATOR), async (c) => {
+  const adminId = c.get('userId')
+  const id = c.req.param('id')
+
+  const existing = await prisma.bundle.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Bundle not found', 404)
+  if (existing.status !== 'ARCHIVED') return err(c, 'Only a removed bundle can be restored', 400)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.bundle.update({ where: { id }, data: { status: 'ACTIVE' as any } })
+    await tx.adminAction.create({
+      data: { adminId, actionType: 'RESTORE_BUNDLE', targetType: 'bundle', targetId: id },
+    })
+  })
+  return ok(c, null)
+})
+
 admin.get('/orders', async (c) => {
   const query = c.req.query()
   const page = Math.max(1, Number(query.page) || 1)
