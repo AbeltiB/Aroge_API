@@ -217,6 +217,46 @@ admin.get('/orders/:id', async (c) => {
   return ok(c, order)
 })
 
+// Full buyer↔seller conversation for this order — dispute resolution
+// previously only showed escrow events and the written dispute reason, with
+// no way to see the actual negotiation/complaint context.
+admin.get('/orders/:id/messages', async (c) => {
+  const id = c.req.param('id')
+  const order = await prisma.order.findUnique({
+    where: { id },
+    select: { buyerId: true, sellerId: true, listingId: true, bundleId: true },
+  })
+  if (!order) return err(c, 'Order not found', 404)
+
+  let listingIds: string[]
+  if (order.listingId) {
+    listingIds = [order.listingId]
+  } else if (order.bundleId) {
+    const items = await prisma.bundleItem.findMany({
+      where: { bundleId: order.bundleId },
+      select: { listingId: true },
+    })
+    listingIds = items.map((i) => i.listingId)
+  } else {
+    listingIds = []
+  }
+
+  if (listingIds.length === 0) return ok(c, [])
+
+  const messages = await prisma.message.findMany({
+    where: {
+      listingId: { in: listingIds },
+      OR: [
+        { senderId: order.buyerId, receiverId: order.sellerId },
+        { senderId: order.sellerId, receiverId: order.buyerId },
+      ],
+    },
+    include: { sender: { select: { id: true, name: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+  return ok(c, messages)
+})
+
 // ─── Payments Ledger ─────────────────────────────────────────────────────────
 
 admin.get('/payments', async (c) => {
