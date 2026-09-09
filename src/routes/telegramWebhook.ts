@@ -22,13 +22,21 @@ function secretMatches(given: string): boolean {
 // button is tapped and Telegram calls back /login/callback with its own
 // signed payload (see POST /auth/telegram/bot/oauth-callback).
 async function handleStartCommand(chatId: number, token: string) {
-  const exists = await redis.get(pendingLoginKey(token))
-  if (!exists) {
+  const raw = await redis.get(pendingLoginKey(token))
+  if (!raw) {
     await sendTelegramMessage(chatId, 'This login link has expired. Please go back to Aroge and tap "Continue with Telegram" again.')
     return
   }
 
-  const loginUrl = `${env.ADMIN_WEB_URL}/login/callback?token=${token}`
+  // The callback page lives on the admin web domain (the only one
+  // registered via @BotFather /setdomain) regardless of who's logging in,
+  // but it behaves differently per intent: admin completes sign-in and
+  // lands on the dashboard there; user (mobile) just confirms and tells
+  // the person to switch back to the app, leaving the mobile app's own
+  // poll loop to actually consume the token — it isn't a browser session
+  // Aroge Web can complete on the marketplace user's behalf.
+  const { intent } = JSON.parse(raw) as { intent: 'user' | 'admin' }
+  const loginUrl = `${env.ADMIN_WEB_URL}/login/callback?token=${token}&intent=${intent}`
   await sendLoginButton(chatId, 'Tap below to finish signing in to Aroge.', loginUrl)
 }
 
