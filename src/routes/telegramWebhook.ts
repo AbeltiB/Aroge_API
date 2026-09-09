@@ -5,14 +5,14 @@ import { redis } from '../lib/redis.js'
 import { sendTelegramMessage } from '../lib/telegramBot.js'
 import { ok, err } from '../lib/response.js'
 import { env } from '../config/env.js'
-import { TOKEN_TTL_SECONDS, pendingLoginKey } from '../lib/telegramLogin.js'
+import { TOKEN_TTL_SECONDS, pendingLoginKey, toWebhookSecretToken } from '../lib/telegramLogin.js'
 
 const telegramWebhook = new Hono()
 
 function secretMatches(given: string): boolean {
   if (!env.TELEGRAM_WEBHOOK_SECRET) return false
   const givenBuf = Buffer.from(given)
-  const expectedBuf = Buffer.from(env.TELEGRAM_WEBHOOK_SECRET)
+  const expectedBuf = Buffer.from(toWebhookSecretToken(env.TELEGRAM_WEBHOOK_SECRET))
   return givenBuf.length === expectedBuf.length && timingSafeEqual(givenBuf, expectedBuf)
 }
 
