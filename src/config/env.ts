@@ -19,6 +19,9 @@ const envSchema = z.object({
   // and is passed to setWebhook on boot. Unset means the bot-deep-link login
   // flow is disabled and /telegram/webhook rejects everything.
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  // Where the bot's Login URL button points (must match the domain
+  // registered via @BotFather → /setdomain).
+  ADMIN_WEB_URL: z.string().default('https://aroge-web.vercel.app'),
 
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),

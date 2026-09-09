@@ -52,6 +52,10 @@ services:
       # RENDER_EXTERNAL_URL, which Render injects automatically.
       - key: TELEGRAM_WEBHOOK_SECRET
         generateValue: true
+      # Where the bot's Login URL button points — must match the domain
+      # registered via @BotFather → /setdomain.
+      - key: ADMIN_WEB_URL
+        value: https://aroge-web.vercel.app
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
