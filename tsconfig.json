@@ -14,8 +14,6 @@
     "lib": ["esnext"],
     "types": ["node"],
     "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "strict": true,
