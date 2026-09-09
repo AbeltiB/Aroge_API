@@ -47,6 +47,11 @@ services:
         sync: false
       - key: TELEGRAM_BOT_USERNAME
         value: aroge_ecommerce_bot
+      # Verifies inbound Telegram webhook calls for the bot-deep-link login
+      # flow; also passed to setWebhook on every boot (idempotent) alongside
+      # RENDER_EXTERNAL_URL, which Render injects automatically.
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

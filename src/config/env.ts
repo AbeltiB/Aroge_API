@@ -15,6 +15,10 @@ const envSchema = z.object({
 
   TELEGRAM_BOT_TOKEN: z.string().min(1, 'TELEGRAM_BOT_TOKEN is required'),
   TELEGRAM_BOT_USERNAME: z.string().default('aroge_ecommerce_bot'),
+  // Verifies inbound Telegram webhook calls (X-Telegram-Bot-Api-Secret-Token)
+  // and is passed to setWebhook on boot. Unset means the bot-deep-link login
+  // flow is disabled and /telegram/webhook rejects everything.
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),

@@ -24,6 +24,7 @@ import { reportRoutes } from './routes/reports.js'
 import { adminRoutes } from './routes/admin.js'
 import { feeRoutes } from './routes/fees.js'
 import { notificationRoutes } from './routes/notifications.js'
+import { telegramWebhookRoutes } from './routes/telegramWebhook.js'
 
 export const app = new Hono()
 
@@ -84,6 +85,7 @@ api.route('/reports', reportRoutes)
 api.route('/admin', adminRoutes)
 api.route('/fees', feeRoutes)
 api.route('/notifications', notificationRoutes)
+api.route('/telegram', telegramWebhookRoutes)
 
 app.onError((error, c) => {
   console.error(`[unhandled] ${c.req.method} ${c.req.path}:`, error)
