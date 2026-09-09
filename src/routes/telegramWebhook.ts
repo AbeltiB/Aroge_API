@@ -1,11 +1,9 @@
 import { Hono } from 'hono'
 import { timingSafeEqual } from 'node:crypto'
-import { prisma } from '../lib/prisma.js'
-import { redis } from '../lib/redis.js'
 import { sendTelegramMessage } from '../lib/telegramBot.js'
 import { ok, err } from '../lib/response.js'
 import { env } from '../config/env.js'
-import { TOKEN_TTL_SECONDS, pendingLoginKey, toWebhookSecretToken } from '../lib/telegramLogin.js'
+import { resolvePendingLogin, toWebhookSecretToken } from '../lib/telegramLogin.js'
 
 const telegramWebhook = new Hono()
 
@@ -17,43 +15,21 @@ function secretMatches(given: string): boolean {
 }
 
 async function handleStartCommand(chatId: number, from: { id: number; first_name?: string; last_name?: string; username?: string }, token: string) {
-  const key = pendingLoginKey(token)
-  const raw = await redis.get(key)
-  if (!raw) {
+  const result = await resolvePendingLogin(token, {
+    telegramId: String(from.id),
+    first_name: from.first_name ?? '',
+    last_name: from.last_name,
+    username: from.username,
+  })
+
+  if (result === 'not-found') {
     await sendTelegramMessage(chatId, 'This login link has expired. Please go back to Aroge and tap "Continue with Telegram" again.')
     return
   }
-
-  const record = JSON.parse(raw)
-  const telegramId = String(from.id)
-
-  if (record.intent === 'admin') {
-    const admin = await prisma.adminUser.findUnique({ where: { telegramId } })
-    if (!admin) {
-      await redis.set(
-        key,
-        JSON.stringify({ ...record, status: 'denied', reason: 'This Telegram account is not registered as an admin' }),
-        'EX', TOKEN_TTL_SECONDS
-      )
-      await sendTelegramMessage(chatId, '🚫 This Telegram account is not registered as an Aroge admin.')
-      return
-    }
+  if (result === 'denied') {
+    await sendTelegramMessage(chatId, '🚫 This Telegram account is not registered as an Aroge admin.')
+    return
   }
-
-  await redis.set(
-    key,
-    JSON.stringify({
-      ...record,
-      status: 'verified',
-      telegram: {
-        telegramId,
-        first_name: from.first_name ?? '',
-        last_name: from.last_name,
-        username: from.username,
-      },
-    }),
-    'EX', TOKEN_TTL_SECONDS
-  )
   await sendTelegramMessage(chatId, "✅ You're logged in to Aroge! Return to the site to continue.")
 }
 

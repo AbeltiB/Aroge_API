@@ -11,7 +11,7 @@ import { ok, err } from '../lib/response.js'
 import { env } from '../config/env.js'
 import { rateLimit } from '../middleware/rateLimit.js'
 import { telegramAuthSchema } from '@arogenpm/sdk'
-import { TOKEN_TTL_SECONDS, pendingLoginKey } from '../lib/telegramLogin.js'
+import { TOKEN_TTL_SECONDS, pendingLoginKey, resolvePendingLogin } from '../lib/telegramLogin.js'
 
 const auth = new Hono()
 
@@ -90,13 +90,12 @@ auth.post('/telegram/admin',
   }
 )
 
-// Bot-based login (used by both web and mobile instead of the Telegram
-// Login Widget / oauth.telegram.org): the client never touches Telegram's
-// own web login screen (which falls back to asking for a phone number when
-// the browser has no active Telegram Web session). Instead the user
-// confirms inside their already-logged-in Telegram app, and the client
-// polls until the bot webhook (see routes/telegramWebhook.ts) marks the
-// token verified.
+// Token-based login: the client requests a token, then completes it one of
+// two ways — (a) the bot deep link (t.me/<bot>?start=login_<token>), resolved
+// by the webhook in routes/telegramWebhook.ts, or (b) the oauth.telegram.org
+// full-page redirect below, resolved by POST /telegram/bot/oauth-callback.
+// Either path writes the same Redis record, and the client polls
+// GET /telegram/bot/poll/:token until it resolves.
 const startBotLoginSchema = z.object({ intent: z.enum(['user', 'admin']).default('user') })
 
 auth.post('/telegram/bot/start',
@@ -113,9 +112,55 @@ auth.post('/telegram/bot/start',
 
     return ok(c, {
       token,
+      // Numeric bot ID (public info — Telegram exposes it in every widget's
+      // rendered HTML too) needed to build the oauth.telegram.org URL.
+      botId: env.TELEGRAM_BOT_TOKEN.split(':')[0],
       deepLink: `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=login_${token}`,
       expiresIn: TOKEN_TTL_SECONDS,
     })
+  }
+)
+
+// Completes (b): oauth.telegram.org redirects the browser back to our own
+// callback page with the signed Telegram payload as query params; that page
+// POSTs them here for verification before the polling tab is allowed to
+// treat the login as done.
+//
+// Mirrors telegramAuthSchema's shape rather than calling .extend() on it —
+// the SDK bundles its own zod v3 internally, and mixing that with this
+// project's zod v4 via .extend() breaks at runtime (different internal
+// ZodObject implementations).
+const oauthCallbackSchema = z.object({
+  token: z.string().min(1),
+  id: z.number(),
+  first_name: z.string(),
+  last_name: z.string().optional(),
+  username: z.string().optional(),
+  photo_url: z.string().optional(),
+  auth_date: z.number(),
+  hash: z.string(),
+})
+
+auth.post('/telegram/bot/oauth-callback',
+  rateLimit(20, 60),
+  zValidator('json', oauthCallbackSchema),
+  async (c) => {
+    const { token, ...data } = c.req.valid('json')
+
+    if (!verifyTelegramAuth(data as any, env.TELEGRAM_BOT_TOKEN)) {
+      return err(c, 'Invalid Telegram auth data', 401)
+    }
+
+    const result = await resolvePendingLogin(token, {
+      telegramId: String(data.id),
+      first_name: data.first_name,
+      last_name: data.last_name,
+      username: data.username,
+    })
+
+    if (result === 'not-found') return err(c, 'Login request expired or not found', 404)
+    if (result === 'denied') return err(c, 'This Telegram account is not registered as an admin', 403)
+    return ok(c, { received: true })
   }
 )
 
