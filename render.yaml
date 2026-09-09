@@ -21,6 +21,12 @@ services:
         value: production
       - key: PORT
         value: 4000
+      # Matches the Worker's pin — same Node version run all session via tsx
+      # (strict tsc itself couldn't be verified locally due to a memory
+      # ceiling on the dev machine; Render's build runs on its own
+      # infrastructure and will surface any real type error directly).
+      - key: NODE_VERSION
+        value: 24.11.1
       # Neon connection string — use the DIRECT (non-pooled) endpoint from
       # Neon's dashboard, not the "-pooler" one: this is a long-running
       # process with its own small Prisma pool, not serverless functions, so
