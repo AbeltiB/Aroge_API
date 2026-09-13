@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { cloudinary } from '../lib/cloudinary.js'
+import { uploadPrivate, signedPrivateUrl } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
@@ -55,9 +55,8 @@ businesses.patch('/:id', zValidator('json', businessSchema.partial()), async (c)
   return ok(c, business)
 })
 
-// Owner-only upload. Stored with Cloudinary's `authenticated` delivery type —
-// the resulting public_id cannot be viewed via a plain URL, only via a
-// signed, time-limited link (see /:id/license-url below).
+// Owner-only upload. Stored in the private bucket — never publicly
+// reachable, only via a signed, time-limited link (see /:id/license-url).
 businesses.post('/:id/license', async (c) => {
   const userId = c.get('userId')
   const id = c.req.param('id')
@@ -71,13 +70,8 @@ businesses.post('/:id/license', async (c) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   try {
-    const uploadResult = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: `aroge/business-licenses/${id}`, type: 'authenticated', resource_type: 'auto' },
-        (error, result) => (error ? reject(error) : resolve(result))
-      ).end(buffer)
-    })
-    await prisma.business.update({ where: { id }, data: { licenseUrl: uploadResult.public_id } })
+    const key = await uploadPrivate(buffer, `business-licenses/${id}`, file.type || 'application/octet-stream')
+    await prisma.business.update({ where: { id }, data: { licenseUrl: key } })
     return ok(c, { uploaded: true })
   } catch (e: any) {
     console.error(`[license] upload failed for business ${id}:`, e?.message)
@@ -92,11 +86,7 @@ businesses.get('/:id/license-url', adminOnly, requireRole(AdminRole.MODERATOR), 
   const business = await prisma.business.findUnique({ where: { id }, select: { licenseUrl: true } })
   if (!business?.licenseUrl) return err(c, 'No license on file', 404)
 
-  const url = cloudinary.utils.private_download_url(business.licenseUrl, undefined, {
-    type: 'authenticated',
-    resource_type: 'image',
-    expires_at: Math.floor(Date.now() / 1000) + 5 * 60, // 5 minutes
-  })
+  const url = await signedPrivateUrl(business.licenseUrl, 5 * 60)
   return ok(c, { url })
 })
 

@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { broadcastQueue } from '../lib/queue.js'
-import { cloudinary } from '../lib/cloudinary.js'
+import { signedPrivateUrl } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { notify } from '../lib/notify.js'
 import { markPaymentHeld } from '../lib/markPaymentHeld.js'
@@ -398,11 +398,7 @@ admin.get('/payments/:id/proof-url', requireRole(AdminRole.MODERATOR), async (c)
   const payment = await prisma.payment.findUnique({ where: { id }, select: { proofKey: true } })
   if (!payment?.proofKey) return err(c, 'No proof on file', 404)
 
-  const url = cloudinary.utils.private_download_url(payment.proofKey, undefined, {
-    type: 'authenticated',
-    resource_type: 'image',
-    expires_at: Math.floor(Date.now() / 1000) + 5 * 60,
-  })
+  const url = await signedPrivateUrl(payment.proofKey, 5 * 60)
   return ok(c, { url })
 })
 

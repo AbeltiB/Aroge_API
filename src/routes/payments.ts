@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { verifyPaymentReferenceSchema } from '@arogenpm/sdk'
 import { prisma } from '../lib/prisma.js'
-import { cloudinary } from '../lib/cloudinary.js'
+import { uploadPrivate } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { getPaymentGateway } from '../lib/payments/registry.js'
 import { markPaymentHeld } from '../lib/markPaymentHeld.js'
@@ -81,15 +81,10 @@ payments.post('/:id/proof', authMiddleware, async (c) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   try {
-    const uploadResult = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: `aroge/payment-proofs/${id}`, type: 'authenticated', resource_type: 'auto' },
-        (error, result) => (error ? reject(error) : resolve(result))
-      ).end(buffer)
-    })
+    const key = await uploadPrivate(buffer, `payment-proofs/${id}`, file.type || 'application/octet-stream')
     const updated = await prisma.payment.update({
       where: { id },
-      data: { proofKey: uploadResult.public_id, proofUploadedAt: new Date() },
+      data: { proofKey: key, proofUploadedAt: new Date() },
     })
     return ok(c, updated)
   } catch (e: any) {

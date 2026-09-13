@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { cloudinary } from '../lib/cloudinary.js'
+import { uploadPublic } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { NOTIFY } from '../lib/notify.js'
@@ -126,16 +126,11 @@ messages.post('/:listingId/:userId/media', async (c) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   try {
-    const uploadResult = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: `aroge/messages/${listingId}`, format: 'webp', transformation: [{ width: 1200, crop: 'limit' }] },
-        (error, result) => (error ? reject(error) : resolve(result))
-      ).end(buffer)
-    })
+    const key = await uploadPublic(buffer, `messages/${listingId}`, file.type || 'image/jpeg')
 
     const [message, sender] = await Promise.all([
       prisma.message.create({
-        data: { listingId, senderId, receiverId, body: '📷 Photo', mediaKey: uploadResult.public_id },
+        data: { listingId, senderId, receiverId, body: '📷 Photo', mediaKey: key },
       }),
       prisma.user.findUnique({ where: { id: senderId }, select: { name: true } }),
     ])

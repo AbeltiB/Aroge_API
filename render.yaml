@@ -56,11 +56,17 @@ services:
       # registered via @BotFather → /setdomain.
       - key: ADMIN_WEB_URL
         value: https://aroge-web.vercel.app
-      - key: CLOUDINARY_CLOUD_NAME
+      - key: MINIO_ENDPOINT
         sync: false
-      - key: CLOUDINARY_API_KEY
+      - key: MINIO_ACCESS_KEY
         sync: false
-      - key: CLOUDINARY_API_SECRET
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: MINIO_PUBLIC_BUCKET
+        value: aroge-public
+      - key: MINIO_PRIVATE_BUCKET
+        value: aroge-private
+      - key: IMGPROXY_URL
         sync: false
       - key: VERIFY_ET_API_KEY
         sync: false

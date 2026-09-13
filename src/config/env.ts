@@ -23,9 +23,15 @@ const envSchema = z.object({
   // registered via @BotFather → /setdomain).
   ADMIN_WEB_URL: z.string().default('https://aroge-web.vercel.app'),
 
-  CLOUDINARY_CLOUD_NAME: z.string().min(1),
-  CLOUDINARY_API_KEY: z.string().min(1),
-  CLOUDINARY_API_SECRET: z.string().min(1),
+  // Self-hosted MinIO (S3-compatible) object storage.
+  MINIO_ENDPOINT: z.string().min(1),
+  MINIO_ACCESS_KEY: z.string().min(1),
+  MINIO_SECRET_KEY: z.string().min(1),
+  MINIO_PUBLIC_BUCKET: z.string().default('aroge-public'),
+  MINIO_PRIVATE_BUCKET: z.string().default('aroge-private'),
+  // Public base URL for imgproxy, which fronts the public bucket for
+  // on-the-fly resizing (clients never talk to MinIO directly).
+  IMGPROXY_URL: z.string().min(1),
 
   TELEBIRR_API_URL: z.string().optional(),
   TELEBIRR_APP_ID: z.string().optional(),

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
-import { cloudinary } from '../lib/cloudinary.js'
+import { uploadPublic, deletePublic } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { verifyAccessToken } from '../lib/jwt.js'
@@ -226,18 +226,13 @@ listings.post('/:id/photos', async (c) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   try {
-    const uploadResult = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: `aroge/listings/${id}`, format: 'webp', transformation: [{ width: 1200, crop: 'limit' }] },
-        (error, result) => (error ? reject(error) : resolve(result))
-      ).end(buffer)
-    })
+    const key = await uploadPublic(buffer, `listings/${id}`, file.type || 'image/jpeg')
 
     const isPrimary = photoCount === 0
     const photo = await prisma.listingPhoto.create({
       data: {
         listingId: id,
-        cloudinaryKey: uploadResult.public_id,
+        cloudinaryKey: key,
         orderIndex: photoCount,
         isPrimary,
       },
@@ -259,7 +254,7 @@ listings.delete('/:id/photos/:photoId', async (c) => {
   const photo = await prisma.listingPhoto.findFirst({ where: { id: photoId, listingId: id } })
   if (!photo) return err(c, 'Photo not found', 404)
 
-  await cloudinary.uploader.destroy(photo.cloudinaryKey)
+  await deletePublic(photo.cloudinaryKey)
   await prisma.listingPhoto.delete({ where: { id: photoId } })
   return ok(c, null)
 })
