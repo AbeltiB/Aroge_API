@@ -29,7 +29,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/aroge-api:latest
+          tags: ghcr.io/abeltib/aroge-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
