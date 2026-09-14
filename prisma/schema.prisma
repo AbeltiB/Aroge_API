@@ -412,7 +412,9 @@ model DeliverySettings {
 
 model Message {
   id         String    @id @default(uuid())
-  listingId  String    @map("listing_id")
+  // Null means a general conversation with a seller, not tied to any one
+  // listing (e.g. started from their profile rather than a listing page).
+  listingId  String?   @map("listing_id")
   senderId   String    @map("sender_id")
   receiverId String    @map("receiver_id")
   body       String
@@ -420,9 +422,9 @@ model Message {
   readAt     DateTime? @map("read_at")
   createdAt  DateTime  @default(now()) @map("created_at")
 
-  listing  Listing @relation(fields: [listingId], references: [id])
-  sender   User    @relation("SentMessages", fields: [senderId], references: [id])
-  receiver User    @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  listing  Listing? @relation(fields: [listingId], references: [id])
+  sender   User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
 
   @@index([listingId, senderId, receiverId])
   @@map("messages")

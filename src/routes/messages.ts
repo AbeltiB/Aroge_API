@@ -12,11 +12,23 @@ const messages = new Hono<{ Variables: AuthVariables }>()
 
 messages.use('*', authMiddleware)
 
-async function assertCanMessage(senderId: string, receiverId: string, listingId: string): Promise<string | null> {
+// "general" in the URL means a conversation not tied to any listing (e.g.
+// started from a seller's profile) — stored as listingId: null.
+const GENERAL = 'general'
+function toListingId(param: string): string | null {
+  return param === GENERAL ? null : param
+}
+
+async function assertCanMessage(senderId: string, receiverId: string, listingId: string | null): Promise<string | null> {
   if (senderId === receiverId) return 'Cannot message yourself'
 
-  const listing = await prisma.listing.findFirst({ where: { id: listingId, deletedAt: null } })
-  if (!listing) return 'Listing not found'
+  if (listingId) {
+    const listing = await prisma.listing.findFirst({ where: { id: listingId, deletedAt: null } })
+    if (!listing) return 'Listing not found'
+  } else {
+    const receiver = await prisma.user.findUnique({ where: { id: receiverId } })
+    if (!receiver) return 'User not found'
+  }
 
   const blocked = await prisma.block.findFirst({
     where: {
@@ -71,7 +83,8 @@ messages.get('/', async (c) => {
 
 messages.get('/:listingId/:userId', async (c) => {
   const myId = c.get('userId')
-  const { listingId, userId: otherId } = c.req.param()
+  const listingId = toListingId(c.req.param('listingId'))
+  const otherId = c.req.param('userId')
 
   const items = await prisma.message.findMany({
     where: {
@@ -96,11 +109,12 @@ messages.post('/:listingId/:userId',
   zValidator('json', z.object({ body: z.string().min(1).max(2000) })),
   async (c) => {
     const senderId = c.get('userId')
-    const { listingId, userId: receiverId } = c.req.param()
+    const listingId = toListingId(c.req.param('listingId'))
+    const receiverId = c.req.param('userId')
     const { body } = c.req.valid('json')
 
     const denyReason = await assertCanMessage(senderId, receiverId, listingId)
-    if (denyReason) return err(c, denyReason, denyReason === 'Listing not found' ? 404 : 400)
+    if (denyReason) return err(c, denyReason, denyReason.endsWith('not found') ? 404 : 400)
 
     const [message, sender] = await Promise.all([
       prisma.message.create({ data: { listingId, senderId, receiverId, body } }),
@@ -115,10 +129,11 @@ messages.post('/:listingId/:userId',
 
 messages.post('/:listingId/:userId/media', async (c) => {
   const senderId = c.get('userId')
-  const { listingId, userId: receiverId } = c.req.param()
+  const listingId = toListingId(c.req.param('listingId'))
+  const receiverId = c.req.param('userId')
 
   const denyReason = await assertCanMessage(senderId, receiverId, listingId)
-  if (denyReason) return err(c, denyReason, denyReason === 'Listing not found' ? 404 : 400)
+  if (denyReason) return err(c, denyReason, denyReason.endsWith('not found') ? 404 : 400)
 
   const formData = await c.req.formData()
   const file = formData.get('photo') as File | null
@@ -126,7 +141,7 @@ messages.post('/:listingId/:userId/media', async (c) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   try {
-    const key = await uploadPublic(buffer, `messages/${listingId}`, file.type || 'image/jpeg')
+    const key = await uploadPublic(buffer, `messages/${listingId ?? GENERAL}`, file.type || 'image/jpeg')
 
     const [message, sender] = await Promise.all([
       prisma.message.create({
@@ -139,7 +154,7 @@ messages.post('/:listingId/:userId/media', async (c) => {
 
     return ok(c, message)
   } catch (e: any) {
-    console.error(`[message photo] upload failed for listing ${listingId}:`, e?.message)
+    console.error(`[message photo] upload failed for listing ${listingId ?? GENERAL}:`, e?.message)
     return err(c, 'Upload failed — please try again later', 500)
   }
 })

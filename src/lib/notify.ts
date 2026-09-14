@@ -93,7 +93,7 @@ export const NOTIFY = {
     notify({ userId: buyerId, type: 'DELIVERY_REJECTED', title: 'Delivery Request Declined', body: `Reason: ${reason}. Your order will proceed as a meet-up.`, data: { orderId } }),
 
   // Message events
-  newMessage: (receiverId: string, senderName: string, body: string, listingId: string) =>
+  newMessage: (receiverId: string, senderName: string, body: string, listingId: string | null) =>
     notify({
       userId: receiverId, type: 'NEW_MESSAGE', title: senderName,
       body: body.length > 100 ? `${body.slice(0, 97)}...` : body,
