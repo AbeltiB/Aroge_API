@@ -202,7 +202,12 @@ auth.get('/telegram/bot/poll/:token', rateLimit(60, 60), async (c) => {
   const refreshToken = await signRefreshToken(user.id, 'user')
   setCookie(c, REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_OPTS)
 
-  return ok(c, { status: 'verified' as const, accessToken, user })
+  // Also returned in the body (admin's response deliberately omits this) —
+  // the mobile app has no browser cookie jar to persist it across app
+  // restarts, so it stores this itself and resends it as a Cookie header
+  // manually on /refresh. The web admin panel relies on the httpOnly cookie
+  // only and never touches this field.
+  return ok(c, { status: 'verified' as const, accessToken, refreshToken, user })
 })
 
 auth.post('/refresh', async (c) => {
