@@ -299,6 +299,20 @@ admin.get('/orders', async (c) => {
   return ok(c, { items, total, page, limit })
 })
 
+// Real per-status counts for the Orders table's filter chips ("All (240)",
+// "Escrow (86)") — one groupBy query instead of the frontend firing a
+// separate count request per status chip.
+admin.get('/orders/status-counts', async (c) => {
+  const grouped = await prisma.order.groupBy({ by: ['orderStatus'], _count: true })
+  const counts: Record<string, number> = {}
+  let total = 0
+  for (const row of grouped) {
+    counts[row.orderStatus] = row._count
+    total += row._count
+  }
+  return ok(c, { total, counts })
+})
+
 admin.get('/orders/:id', async (c) => {
   const id = c.req.param('id')
   const order = await prisma.order.findUnique({
@@ -469,6 +483,19 @@ admin.get('/disputes', async (c) => {
     prisma.order.count({ where: { orderStatus: 'DISPUTED' as any } }),
   ])
   return ok(c, { items, total, page, limit })
+})
+
+// ─── Nav badge counts ────────────────────────────────────────────────────────
+// One combined endpoint for the sidebar's real (not hardcoded) badge counts
+// and the dashboard's "needs attention" indicators, instead of the frontend
+// firing off 3+ separate count-only list requests on every navigation.
+admin.get('/nav-counts', async (c) => {
+  const [disputes, pendingOrders, pendingBusinesses] = await Promise.all([
+    prisma.order.count({ where: { orderStatus: 'DISPUTED' as any } }),
+    prisma.order.count({ where: { orderStatus: 'PENDING_PAYMENT' as any } }),
+    prisma.business.count({ where: { verifiedAt: null } }),
+  ])
+  return ok(c, { disputes, pendingOrders, pendingBusinesses })
 })
 
 // ─── Review Moderation ───────────────────────────────────────────────────────
