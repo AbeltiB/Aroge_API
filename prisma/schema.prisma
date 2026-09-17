@@ -167,8 +167,40 @@ model AdminUser {
 
   adminActions AdminAction[]
   broadcasts   AdminBroadcast[]
+  notificationPrefs AdminNotificationPrefs?
 
   @@map("admin_users")
+}
+
+// Global, not per-recipient — one small admin team, not thousands of users,
+// so a single readAt (first admin to see it marks it read for everyone) is
+// the right-sized model. A per-admin join table would be over-engineering
+// for this scale.
+model AdminNotification {
+  id          String    @id @default(uuid())
+  type        String
+  title       String
+  body        String
+  relatedType String?   @map("related_type")
+  relatedId   String?   @map("related_id")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([readAt, createdAt])
+  @@map("admin_notifications")
+}
+
+// Per-admin mute list — which AdminNotification `type`s this admin doesn't
+// want counted toward their unread bell (e.g. SUPPORT muting fee-change
+// alerts). Absence of a row means "nothing muted."
+model AdminNotificationPrefs {
+  adminId    String   @id @map("admin_id")
+  mutedTypes String[] @map("muted_types")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@map("admin_notification_prefs")
 }
 
 model Business {

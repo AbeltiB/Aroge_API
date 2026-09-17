@@ -6,6 +6,7 @@ import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
+import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
 import { AdminRole } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
@@ -26,6 +27,7 @@ reports.post('/', zValidator('json', createReportSchema), async (c) => {
   const report = await prisma.report.create({
     data: { reporterId, ...body },
   })
+  void ADMIN_NOTIFY.reportFiled(report.id, body.targetType, body.reason)
   return ok(c, report)
 })
 

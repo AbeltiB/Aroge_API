@@ -498,6 +498,69 @@ admin.get('/nav-counts', async (c) => {
   return ok(c, { disputes, pendingOrders, pendingBusinesses })
 })
 
+// ─── Admin notifications ─────────────────────────────────────────────────────
+// Global, not per-recipient (see the AdminNotification schema comment) — the
+// list is unfiltered by mute prefs (muting only suppresses the unread count,
+// it doesn't hide history), only unread-count respects them.
+
+admin.get('/notifications', async (c) => {
+  const page = Math.max(1, Number(c.req.query('page')) || 1)
+  const limit = Math.min(100, Number(c.req.query('limit')) || 30)
+  const skip = (page - 1) * limit
+
+  const [items, total] = await Promise.all([
+    prisma.adminNotification.findMany({ orderBy: { createdAt: 'desc' }, skip, take: limit }),
+    prisma.adminNotification.count(),
+  ])
+  return ok(c, { items, total, page, limit })
+})
+
+admin.get('/notifications/unread-count', async (c) => {
+  const adminId = c.get('userId')
+  const prefs = await prisma.adminNotificationPrefs.findUnique({ where: { adminId } })
+  const muted = prefs?.mutedTypes ?? []
+
+  const count = await prisma.adminNotification.count({
+    where: { readAt: null, ...(muted.length ? { type: { notIn: muted } } : {}) },
+  })
+  return ok(c, { count })
+})
+
+admin.patch('/notifications/:id/read', async (c) => {
+  const id = c.req.param('id')
+  const existing = await prisma.adminNotification.findUnique({ where: { id } })
+  if (!existing) return err(c, 'Notification not found', 404)
+  if (!existing.readAt) {
+    await prisma.adminNotification.update({ where: { id }, data: { readAt: new Date() } })
+  }
+  return ok(c, null)
+})
+
+admin.patch('/notifications/read-all', async (c) => {
+  await prisma.adminNotification.updateMany({ where: { readAt: null }, data: { readAt: new Date() } })
+  return ok(c, null)
+})
+
+admin.get('/notification-prefs', async (c) => {
+  const adminId = c.get('userId')
+  const prefs = await prisma.adminNotificationPrefs.findUnique({ where: { adminId } })
+  return ok(c, { mutedTypes: prefs?.mutedTypes ?? [] })
+})
+
+admin.patch('/notification-prefs',
+  zValidator('json', z.object({ mutedTypes: z.array(z.string()) })),
+  async (c) => {
+    const adminId = c.get('userId')
+    const { mutedTypes } = c.req.valid('json')
+    const prefs = await prisma.adminNotificationPrefs.upsert({
+      where: { adminId },
+      create: { adminId, mutedTypes },
+      update: { mutedTypes },
+    })
+    return ok(c, { mutedTypes: prefs.mutedTypes })
+  }
+)
+
 // ─── Review Moderation ───────────────────────────────────────────────────────
 // No prior admin visibility existed into buyer/seller star ratings and
 // comments at all — a fake or abusive review couldn't be seen or removed.

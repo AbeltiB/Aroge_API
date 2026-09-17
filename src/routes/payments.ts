@@ -6,6 +6,7 @@ import { uploadPrivate } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { getPaymentGateway } from '../lib/payments/registry.js'
 import { markPaymentHeld } from '../lib/markPaymentHeld.js'
+import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { rateLimit } from '../middleware/rateLimit.js'
 import {
@@ -86,6 +87,7 @@ payments.post('/:id/proof', authMiddleware, async (c) => {
       where: { id },
       data: { proofKey: key, proofUploadedAt: new Date() },
     })
+    void ADMIN_NOTIFY.paymentProofUploaded(updated.id, updated.orderId)
     return ok(c, updated)
   } catch (e: any) {
     console.error(`[payment proof] upload failed for payment ${id}:`, e?.message)

@@ -8,6 +8,7 @@ import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
 import { setOrderListingsStatus } from '../lib/orderListings.js'
+import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
 import { disputeSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
@@ -66,6 +67,8 @@ escrow.post('/orders/:orderId/dispute',
         },
       })
     })
+
+    void ADMIN_NOTIFY.disputeOpened(orderId, order.amount)
 
     return ok(c, null)
   }

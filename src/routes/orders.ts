@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js'
 import { notificationQueue, escrowQueue, deliveryQueue } from '../lib/queue.js'
 import { ok, err } from '../lib/response.js'
 import { NOTIFY } from '../lib/notify.js'
+import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { createOrderSchema } from '@arogenpm/sdk'
 import { getPaymentGateway } from '../lib/payments/registry.js'
@@ -112,7 +113,7 @@ orders.post('/',
         [seller?.subCity, seller?.city].filter(Boolean).join(', ') ||
         ''
 
-      await prisma.delivery.create({
+      const delivery = await prisma.delivery.create({
         data: {
           orderId: order.id,
           fee: deliveryFee,
@@ -121,6 +122,7 @@ orders.post('/',
           dropoffAddress: body.dropoffAddress!.trim(),
         },
       })
+      void ADMIN_NOTIFY.deliveryRequested(delivery.id, order.id)
     }
 
     const payment = await prisma.payment.create({

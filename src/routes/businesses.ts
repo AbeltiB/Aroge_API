@@ -7,6 +7,7 @@ import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
+import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
 import { AdminRole } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
@@ -27,6 +28,7 @@ businesses.post('/', zValidator('json', businessSchema), async (c) => {
   const business = await prisma.business.create({
     data: { ...body, repUserId },
   })
+  void ADMIN_NOTIFY.businessRegistered(business.id, business.name)
   return ok(c, business)
 })
 
