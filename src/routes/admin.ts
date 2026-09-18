@@ -83,13 +83,16 @@ admin.patch('/users/:id/unban', requireRole(AdminRole.MODERATOR), async (c) => {
 admin.get('/listings', async (c) => {
   const query = c.req.query()
   const showRemoved = query.removed === 'true'
-  const status = (query.status as any) || (showRemoved ? undefined : 'ACTIVE')
+  // A `q` search should find a listing regardless of status (e.g. jumping in
+  // from the top-bar search) rather than being silently filtered to ACTIVE.
+  const status = (query.status as any) || (showRemoved || query.q ? undefined : 'ACTIVE')
   const page = Math.max(1, Number(query.page) || 1)
   const limit = Math.min(100, Number(query.limit) || 30)
   const skip = (page - 1) * limit
 
   const where: any = { deletedAt: showRemoved ? { not: null } : null }
   if (status) where.status = status
+  if (query.q) where.title = { contains: query.q, mode: 'insensitive' }
 
   const [items, total] = await Promise.all([
     prisma.listing.findMany({
@@ -498,6 +501,61 @@ admin.get('/nav-counts', async (c) => {
   return ok(c, { disputes, pendingOrders, pendingBusinesses })
 })
 
+// Bounded, grouped search for the top-bar search box — a handful of results
+// per entity type, not a full paginated search UI. Orders have no
+// human-readable number (uuid `id` only), so they're matched by id prefix
+// (what an admin would paste from a support chat) alongside buyer/seller name.
+admin.get('/search', async (c) => {
+  const q = (c.req.query('q') || '').trim()
+  if (q.length < 2) return ok(c, { users: [], listings: [], businesses: [], orders: [] })
+
+  const LIMIT = 5
+  const [users, listings, businesses, orders] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { telegramId: { contains: q } },
+        ],
+      },
+      select: { id: true, name: true, telegramId: true, city: true },
+      take: LIMIT,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.listing.findMany({
+      where: { deletedAt: null, title: { contains: q, mode: 'insensitive' } },
+      select: { id: true, title: true, price: true, status: true },
+      take: LIMIT,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.business.findMany({
+      where: { name: { contains: q, mode: 'insensitive' } },
+      select: { id: true, name: true, type: true, verifiedAt: true },
+      take: LIMIT,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.order.findMany({
+      where: {
+        OR: [
+          { id: { startsWith: q } },
+          { buyer: { name: { contains: q, mode: 'insensitive' } } },
+          { seller: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      },
+      select: {
+        id: true, amount: true, orderStatus: true,
+        buyer: { select: { name: true } },
+        seller: { select: { name: true } },
+      },
+      take: LIMIT,
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
+
+  return ok(c, { users, listings, businesses, orders })
+})
+
 // ─── Admin notifications ─────────────────────────────────────────────────────
 // Global, not per-recipient (see the AdminNotification schema comment) — the
 // list is unfiltered by mute prefs (muting only suppresses the unread count,
@@ -612,6 +670,7 @@ admin.get('/businesses', async (c) => {
 
   const where: any = {}
   if (unverifiedOnly) where.verifiedAt = null
+  if (query.q) where.name = { contains: query.q, mode: 'insensitive' }
 
   const [items, total] = await Promise.all([
     prisma.business.findMany({
