@@ -1,15 +1,13 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { randomUUID } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 import { notificationQueue, escrowQueue, deliveryQueue } from '../lib/queue.js'
 import { ok, err } from '../lib/response.js'
 import { NOTIFY } from '../lib/notify.js'
-import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { createOrderSchema } from '@arogenpm/sdk'
-import { getPaymentGateway } from '../lib/payments/registry.js'
 import { setOrderListingsStatus } from '../lib/orderListings.js'
+import { createOrderFromListing, OrderCreationError } from '../lib/orderCreation.js'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const orders = new Hono<{ Variables: AuthVariables }>()
@@ -56,101 +54,26 @@ orders.post('/',
       title = `Bundle (${bundle.items.length} items)`
     }
 
-    // Delivery: read live settings, validate enabled, snapshot fee
-    let deliveryFee = 0
-    if (body.deliveryMethod === 'AROGE_DELIVERY') {
-      const deliverySettings = await prisma.deliverySettings.findUnique({ where: { id: 'default' } })
-      if (!deliverySettings?.isEnabled) return err(c, 'Delivery service is not currently available', 400)
-      deliveryFee = deliverySettings.fee
-    }
-
-    // Fetch active buyer-facing fees and snapshot them at order time
-    const activeFees = await prisma.platformFee.findMany({
-      where: { isActive: true, visibleTo: { in: ['BUYER', 'BOTH'] } },
-      orderBy: { displayOrder: 'asc' },
-    })
-
-    const feeSnapshot = activeFees.map((fee) => ({
-      feeId: fee.id,
-      name: fee.name,
-      type: fee.type,
-      value: fee.value,
-      amount:
-        fee.type === 'PERCENTAGE'
-          ? Math.round(amount * (fee.value / 100) * 100) / 100
-          : fee.value,
-    }))
-
-    const serviceFee = feeSnapshot.reduce((sum, f) => sum + f.amount, 0)
-    const totalAmount = amount + deliveryFee + serviceFee
-
-    const idempotencyKey = randomUUID()
-
-    const order = await prisma.order.create({
-      data: {
-        listingId: body.listingId ?? null,
-        bundleId: body.bundleId ?? null,
+    let result
+    try {
+      result = await createOrderFromListing({
         buyerId,
         sellerId,
+        listingId: body.listingId,
+        bundleId: body.bundleId,
+        title,
         amount,
-        deliveryFee,
-        serviceFee,
-        feeSnapshot,
-        deliveryMethod: body.deliveryMethod as any,
-        paymentMethod: body.paymentMethod as any,
-        idempotencyKey,
-      },
-    })
-
-    // If delivery was requested, create it in PENDING_APPROVAL state immediately
-    if (body.deliveryMethod === 'AROGE_DELIVERY') {
-      const seller = await prisma.user.findUnique({
-        where: { id: sellerId },
-        select: { city: true, subCity: true },
+        deliveryMethod: body.deliveryMethod,
+        paymentMethod: body.paymentMethod,
+        pickupAddress: body.pickupAddress,
+        dropoffAddress: body.dropoffAddress,
       })
-      const pickupAddress =
-        body.pickupAddress?.trim() ||
-        [seller?.subCity, seller?.city].filter(Boolean).join(', ') ||
-        ''
-
-      const delivery = await prisma.delivery.create({
-        data: {
-          orderId: order.id,
-          fee: deliveryFee,
-          status: 'PENDING_APPROVAL' as any,
-          pickupAddress,
-          dropoffAddress: body.dropoffAddress!.trim(),
-        },
-      })
-      void ADMIN_NOTIFY.deliveryRequested(delivery.id, order.id)
+    } catch (e) {
+      if (e instanceof OrderCreationError) return err(c, e.message, 400)
+      throw e
     }
 
-    const payment = await prisma.payment.create({
-      data: {
-        orderId: order.id,
-        gateway: body.paymentMethod as any,
-        amount: totalAmount,
-        idempotencyKey,
-      },
-    })
-
-    const gateway = getPaymentGateway(body.paymentMethod as any)
-    const charge = await gateway.initiateCharge({
-      orderId: order.id,
-      paymentId: payment.id,
-      amount: totalAmount,
-      idempotencyKey,
-    })
-
-    if (charge.gatewayRef) {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { gatewayRef: charge.gatewayRef },
-      })
-    }
-
-    // Notify seller of new order (fire-and-forget)
-    void NOTIFY.orderPlaced(sellerId, title, order.id)
+    const { order, feeSnapshot, totalAmount, charge, idempotencyKey } = result
 
     return ok(c, {
       order,

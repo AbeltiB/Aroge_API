@@ -106,6 +106,26 @@ enum ReportTarget {
   MESSAGE
 }
 
+enum OrderSource {
+  MARKETPLACE
+  LIVE
+}
+
+enum LiveSessionStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  RECONCILED
+}
+
+enum ClaimStatus {
+  CLAIMED
+  WAITLISTED
+  EXPIRED
+  CONVERTED
+  CANCELLED
+}
+
 enum ReportStatus {
   PENDING
   REVIEWED
@@ -152,6 +172,8 @@ model User {
   blockedUsers     Block[]           @relation("Blocker")
   blockedByUsers   Block[]           @relation("Blocked")
   reports          Report[]
+  liveSessions     LiveSession[]
+  liveClaims       Claim[]
 
   @@map("users")
 }
@@ -215,8 +237,9 @@ model Business {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  rep      User      @relation(fields: [repUserId], references: [id])
-  listings Listing[]
+  rep          User          @relation(fields: [repUserId], references: [id])
+  listings     Listing[]
+  liveSessions LiveSession[]
 
   @@map("businesses")
 }
@@ -249,6 +272,7 @@ model Listing {
   status      ListingStatus @default(DRAFT)
   city        String?
   subCity     String?       @map("sub_city")
+  itemCode    String?       @unique @map("item_code")
   deletedAt   DateTime?     @map("deleted_at")
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
@@ -262,6 +286,7 @@ model Listing {
   messages Message[]
   savedBy  SavedItem[]
   bundleItems BundleItem[]
+  liveItems   LiveItem[]
 
   @@map("listings")
 }
@@ -338,6 +363,8 @@ model Order {
   serviceFee      Float          @default(0) @map("service_fee")
   feeSnapshot     Json?          @map("fee_snapshot")
   idempotencyKey  String         @unique @map("idempotency_key")
+  source          OrderSource    @default(MARKETPLACE)
+  liveSessionId   String?        @map("live_session_id")
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
@@ -345,10 +372,12 @@ model Order {
   bundle        Bundle?        @relation(fields: [bundleId], references: [id])
   buyer         User           @relation("BuyerOrders", fields: [buyerId], references: [id])
   seller        User           @relation("SellerOrders", fields: [sellerId], references: [id])
+  liveSession   LiveSession?   @relation(fields: [liveSessionId], references: [id])
   payment       Payment?
   escrowEvents  EscrowEvent[]
   delivery      Delivery?
   reviews       Review[]
+  liveClaim     Claim?
 
   @@map("orders")
 }
@@ -636,4 +665,74 @@ model HolidayModeLog {
   @@index([userId])
   @@index([createdAt])
   @@map("holiday_mode_logs")
+}
+
+// ─── Aroge Live ─────────────────────────────────────────────────────────────
+// The live video itself happens off-platform (TikTok/Instagram) — this is
+// just the claims-to-orders pipeline behind it. No separate staff auth: the
+// seller runs it themselves from the mobile app under Seller Mode, same
+// identity as everywhere else (see aroge-live-implementation-spec.md and the
+// integration plan for the full rationale).
+
+model LiveSession {
+  id                 String            @id @default(uuid())
+  sellerId           String            @map("seller_id")
+  businessId         String?           @map("business_id")
+  slug               String            @unique
+  status             LiveSessionStatus @default(SCHEDULED)
+  claimWindowMinutes Int               @default(15) @map("claim_window_minutes")
+  startedAt          DateTime?         @map("started_at")
+  endedAt            DateTime?         @map("ended_at")
+  summary            Json?             @map("summary")
+  summaryComputedAt  DateTime?         @map("summary_computed_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+
+  seller   User       @relation(fields: [sellerId], references: [id])
+  business Business?  @relation(fields: [businessId], references: [id])
+  items    LiveItem[]
+  claims   Claim[]
+  orders   Order[]
+
+  @@index([sellerId])
+  @@map("live_sessions")
+}
+
+model LiveItem {
+  id            String  @id @default(uuid())
+  liveSessionId String  @map("live_session_id")
+  listingId     String  @map("listing_id")
+  code          String
+  revealed      Boolean @default(false)
+  stockAtStart  Int     @map("stock_at_start")
+  priceOverride Float?  @map("price_override")
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id])
+  listing     Listing     @relation(fields: [listingId], references: [id])
+  claims      Claim[]
+
+  @@unique([liveSessionId, code])
+  @@index([listingId])
+  @@map("live_items")
+}
+
+model Claim {
+  id               String      @id @default(uuid())
+  liveSessionId    String      @map("live_session_id")
+  liveItemId       String      @map("live_item_id")
+  customerPhone    String      @map("customer_phone")
+  telegramUserId   String?     @map("telegram_user_id")
+  buyerId          String?     @map("buyer_id")
+  status           ClaimStatus @default(CLAIMED)
+  expiresAt        DateTime    @map("expires_at")
+  orderId          String?     @unique @map("order_id")
+  waitlistPosition Int?        @map("waitlist_position")
+  createdAt        DateTime    @default(now()) @map("created_at")
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id])
+  liveItem    LiveItem    @relation(fields: [liveItemId], references: [id])
+  buyer       User?       @relation(fields: [buyerId], references: [id])
+  order       Order?      @relation(fields: [orderId], references: [id])
+
+  @@index([liveItemId, status])
+  @@map("claims")
 }

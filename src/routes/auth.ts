@@ -96,7 +96,14 @@ auth.post('/telegram/admin',
 // full-page redirect below, resolved by POST /telegram/bot/oauth-callback.
 // Either path writes the same Redis record, and the client polls
 // GET /telegram/bot/poll/:token until it resolves.
-const startBotLoginSchema = z.object({ intent: z.enum(['user', 'admin']).default('user') })
+const startBotLoginSchema = z.object({
+  intent: z.enum(['user', 'admin']).default('user'),
+  // Set when this login is really an Aroge Live buyer confirming a claim
+  // (see resolvePendingLogin) — the seller's app calls this with the claim
+  // they just created, not the buyer, so the resulting deep link can be
+  // shared out of band instead of polled locally.
+  claimId: z.string().uuid().optional(),
+})
 
 auth.post('/telegram/bot/start',
   rateLimit(20, 60),
@@ -106,9 +113,26 @@ auth.post('/telegram/bot/start',
       return err(c, 'Bot login is not configured on this server', 503)
     }
 
-    const { intent } = c.req.valid('json')
+    const { intent, claimId } = c.req.valid('json')
+
+    // A claim-confirmation link gets shared out of band (WhatsApp, a TikTok
+    // DM) and may not get tapped within the normal 5-minute login window —
+    // give it as long as the claim itself stays active instead.
+    let ttlSeconds = TOKEN_TTL_SECONDS
+    if (claimId) {
+      const claim = await prisma.claim.findUnique({
+        where: { id: claimId },
+        select: { liveSession: { select: { claimWindowMinutes: true } } },
+      })
+      if (claim) ttlSeconds = Math.max(TOKEN_TTL_SECONDS, claim.liveSession.claimWindowMinutes * 60)
+    }
+
     const token = randomBytes(16).toString('hex')
-    await redis.set(pendingLoginKey(token), JSON.stringify({ status: 'pending', intent }), 'EX', TOKEN_TTL_SECONDS)
+    await redis.set(
+      pendingLoginKey(token),
+      JSON.stringify({ status: 'pending', intent, ...(claimId ? { claimId } : {}) }),
+      'EX', ttlSeconds
+    )
 
     return ok(c, {
       token,
@@ -116,7 +140,7 @@ auth.post('/telegram/bot/start',
       // rendered HTML too) needed to build the oauth.telegram.org URL.
       botId: env.TELEGRAM_BOT_TOKEN.split(':')[0],
       deepLink: `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=login_${token}`,
-      expiresIn: TOKEN_TTL_SECONDS,
+      expiresIn: ttlSeconds,
     })
   }
 )
@@ -158,9 +182,9 @@ auth.post('/telegram/bot/oauth-callback',
       username: data.username,
     })
 
-    if (result === 'not-found') return err(c, 'Login request expired or not found', 404)
-    if (result === 'denied') return err(c, 'This Telegram account is not registered as an admin', 403)
-    return ok(c, { received: true })
+    if (result.status === 'not-found') return err(c, 'Login request expired or not found', 404)
+    if (result.status === 'denied') return err(c, 'This Telegram account is not registered as an admin', 403)
+    return ok(c, { received: true, claimId: result.claimId ?? null })
   }
 )
 
