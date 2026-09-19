@@ -21,3 +21,7 @@ Most of the actual risk in this API (escrow dispute/release/refund, payment-webh
 Covered: JWT signing/verification, the payment gateway classes, `orderCreation.ts`, `markPaymentHeld.ts`, all four `escrow.ts` routes, and the auth/role middleware.
 
 **Not covered yet** (flagged as follow-up, not silently dropped): `admin.ts` (1071 lines), the Telegram signature-verification login flow in `auth.ts`, and the `verify.et` bank-reference-verification routes in `payments.ts`.
+
+## `npm run typecheck` is not part of the CI gate
+
+Confirmed via a real CI run: `tsc --noEmit` OOMs even on GitHub's standard runner at a 6GB heap ceiling (~7 min in, `FATAL ERROR: Ineffective mark-compacts near heap limit`) — this isn't specific to the local dev machine's limited RAM. Prisma 7's generated types are apparently large enough that this repo's own `build` script already sidesteps full checking with `tsc --noCheck` rather than `tsc`. Until that's fixed structurally (a bigger CI runner, or something that reduces the type-checking surface), CI relies on the test suite for correctness and doesn't type-check at all — a real gap versus the original Phase 2 plan, worth a dedicated look later.
