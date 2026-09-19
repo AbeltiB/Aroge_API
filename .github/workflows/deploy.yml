@@ -45,6 +45,10 @@ jobs:
 
       - run: npm ci
 
+      # npm ci doesn't run this on its own (no postinstall hook) — without
+      # it, every import of src/generated/prisma/client fails outright.
+      - run: npx prisma generate
+
       - run: cp .env.test.example .env.test
 
       # Empty, ephemeral, CI-only database — safe to push straight to
