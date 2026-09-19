@@ -4,6 +4,7 @@ import { logger } from 'hono/logger'
 import { timingSafeEqual } from 'node:crypto'
 import { ok, err } from './lib/response.js'
 import { env } from './config/env.js'
+import { Sentry } from './lib/sentry.js'
 import { prisma } from './lib/prisma.js'
 import { redis } from './lib/redis.js'
 import { authRoutes } from './routes/auth.js'
@@ -93,5 +94,8 @@ api.route('/claims', claimRoutes)
 
 app.onError((error, c) => {
   console.error(`[unhandled] ${c.req.method} ${c.req.path}:`, error)
+  // No-ops if SENTRY_DSN isn't set (see lib/sentry.ts) — safe to call
+  // unconditionally rather than checking env.SENTRY_DSN here too.
+  Sentry.captureException(error)
   return err(c, 'Internal server error', 500)
 })

@@ -48,6 +48,10 @@ const envSchema = z.object({
   // Gates GET /warm (a DB+Redis-touching keep-alive endpoint for an uptime
   // monitor) — unset means anyone could trigger it, harmless but unthrottled.
   WARM_PING_SECRET: z.string().optional(),
+
+  // Self-hosted GlitchTip DSN (Sentry-API-compatible). Unset disables error
+  // tracking entirely — see src/lib/sentry.ts.
+  SENTRY_DSN: z.string().optional(),
 }).refine(
   (data) => !data.VERIFY_ET_API_KEY || !!data.VERIFY_ET_WEBHOOK_SECRET,
   {

@@ -1,4 +1,16 @@
 import 'dotenv/config'
+import { initSentry } from './lib/sentry.js'
+
+// Note: in ESM, every import below is fully resolved before this call
+// actually runs (imports aren't interleaved with a module's own top-level
+// code) — so this does NOT get Sentry's auto-instrumentation of modules
+// loaded later, the way requiring it first would in CommonJS. That's fine
+// here: tracesSampleRate is 0 (see sentry.ts) and the only thing that
+// matters is Sentry.init() having run before app.onError() ever calls
+// Sentry.captureException(), which this guarantees regardless of ESM's
+// import-hoisting — that first real request is always well after this line.
+initSentry()
+
 import { serve } from '@hono/node-server'
 import { env } from './config/env.js'
 import { app } from './app.js'
