@@ -99,7 +99,7 @@ payments.post('/:id/proof', authMiddleware, async (c) => {
 // receiptNumber, accountSuffix vs suffix, phone vs phoneNumber). Sending every
 // alias with the same value is harmless — "explicit bank payloads always win
 // when bank is present" per their docs — and avoids a brittle per-bank switch.
-function buildVerifyEtPayload(
+export function buildVerifyEtPayload(
   input: { bank: string; reference: string; suffix?: string; phone?: string },
   settlementAccount: string,
   webhookUrl?: string
@@ -125,7 +125,7 @@ function buildVerifyEtPayload(
 // production — X-Forwarded-Proto/Host (set by the proxy) is the only reliable
 // signal for the real public scheme/host. A local dev/tunnel-less origin has
 // neither header and no https, so it correctly falls through to undefined.
-function buildWebhookCallbackUrl(c: any): string | undefined {
+export function buildWebhookCallbackUrl(c: any): string | undefined {
   const forwardedProto = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim()
   const forwardedHost = c.req.header('x-forwarded-host')?.split(',')[0]?.trim() ?? c.req.header('host')
   const proto = forwardedProto ?? new URL(c.req.url).protocol.replace(':', '')
