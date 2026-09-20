@@ -6,6 +6,7 @@ import { uploadPublic, deletePublic } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { verifyAccessToken } from '../lib/jwt.js'
+import { enqueueSearchSync } from '../lib/searchSync.js'
 import { createListingSchema, updateListingSchema, listingStatusSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
@@ -150,6 +151,7 @@ listings.post('/',
     const listing = await prisma.listing.create({
       data: { ...body as any, sellerId: userId, status: 'DRAFT' },
     })
+    void enqueueSearchSync(listing.id)
     return ok(c, listing)
   }
 )
@@ -170,6 +172,7 @@ listings.patch('/:id',
       where: { id },
       data: body as any,
     })
+    void enqueueSearchSync(listing.id)
     return ok(c, listing)
   }
 )
@@ -187,6 +190,7 @@ listings.delete('/:id', async (c) => {
     where: { id },
     data: { deletedAt: new Date(), status: 'ARCHIVED' as any },
   })
+  void enqueueSearchSync(id)
   return ok(c, null)
 })
 
@@ -207,6 +211,7 @@ listings.patch('/:id/status',
       where: { id },
       data: { status: status as any },
     })
+    void enqueueSearchSync(listing.id)
     return ok(c, listing)
   }
 )

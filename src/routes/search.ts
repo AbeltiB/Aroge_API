@@ -1,61 +1,70 @@
 import { Hono } from 'hono'
 import { prisma } from '../lib/prisma.js'
+import { listingsIndex } from '../lib/meilisearch.js'
 import { ok } from '../lib/response.js'
 
 const search = new Hono()
+
+function escapeFilterValue(value: string): string {
+  return value.replace(/"/g, '\\"')
+}
 
 search.get('/', async (c) => {
   const query = c.req.query()
   const q = query.q ?? ''
   const page = Math.max(1, Number(query.page) || 1)
   const limit = Math.min(50, Number(query.limit) || 20)
-  const skip = (page - 1) * limit
+  const offset = (page - 1) * limit
 
-  const where: any = {
-    deletedAt: null,
-    status: 'ACTIVE',
-    seller: { holidayMode: false },
-  }
+  const filters: string[] = []
+  if (query.categoryId) filters.push(`categoryId = "${escapeFilterValue(query.categoryId)}"`)
+  if (query.city) filters.push(`city = "${escapeFilterValue(query.city)}"`)
+  if (query.condition) filters.push(`condition = "${escapeFilterValue(query.condition)}"`)
+  if (query.minPrice) filters.push(`price >= ${Number(query.minPrice)}`)
+  if (query.maxPrice) filters.push(`price <= ${Number(query.maxPrice)}`)
+  if (query.negotiable === 'true') filters.push('negotiable = true')
+  if (query.sellerType === 'business') filters.push('isBusiness = true')
+  if (query.sellerType === 'individual') filters.push('isBusiness = false')
 
-  if (q) {
-    where.OR = [
-      { title: { contains: q, mode: 'insensitive' } },
-      { description: { contains: q, mode: 'insensitive' } },
-    ]
-  }
+  const sort =
+    query.sort === 'price_asc' ? ['price:asc']
+    : query.sort === 'price_desc' ? ['price:desc']
+    : ['createdAt:desc']
 
-  if (query.categoryId) where.categoryId = query.categoryId
-  if (query.city) where.city = query.city
-  if (query.condition) where.condition = query.condition
-  if (query.minPrice || query.maxPrice) {
-    where.price = {}
-    if (query.minPrice) where.price.gte = Number(query.minPrice)
-    if (query.maxPrice) where.price.lte = Number(query.maxPrice)
-  }
-  if (query.negotiable === 'true') where.negotiable = true
-  if (query.sellerType === 'business') where.businessId = { not: null }
-  if (query.sellerType === 'individual') where.businessId = null
+  const results = await listingsIndex.search(q, {
+    filter: filters.length ? filters.join(' AND ') : undefined,
+    sort,
+    offset,
+    limit,
+  })
 
-  const orderBy: any =
-    query.sort === 'price_asc' ? { price: 'asc' }
-    : query.sort === 'price_desc' ? { price: 'desc' }
-    : { createdAt: 'desc' }
+  const hitIds = results.hits.map((hit) => hit.id as string)
 
-  const [items, total] = await Promise.all([
-    prisma.listing.findMany({
-      where,
-      include: {
-        photos: { where: { isPrimary: true }, take: 1 },
-        category: true,
-        seller: { select: { id: true, name: true, avatarUrl: true, verified: true, isTrusted: true } },
-      },
-      orderBy,
-      skip,
-      take: limit,
-    }),
-    prisma.listing.count({ where }),
-  ])
+  const rows = hitIds.length
+    ? await prisma.listing.findMany({
+        where: {
+          id: { in: hitIds },
+          deletedAt: null,
+          status: 'ACTIVE',
+          seller: { holidayMode: false },
+        },
+        include: {
+          photos: { where: { isPrimary: true }, take: 1 },
+          category: true,
+          seller: { select: { id: true, name: true, avatarUrl: true, verified: true, isTrusted: true } },
+        },
+      })
+    : []
 
+  // The index is eventually-consistent with Postgres (see lib/searchSync.ts)
+  // — this re-applies the real business rules (active, not deleted, seller
+  // not on holiday) and drops anything the index hasn't caught up on yet,
+  // then restores Meilisearch's rank order (findMany with `id: { in }`
+  // doesn't preserve input order).
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const items = hitIds.map((id) => byId.get(id)).filter((row) => row !== undefined)
+
+  const total = results.estimatedTotalHits
   return ok(c, { items, total, page, limit, pages: Math.ceil(total / limit) })
 })
 

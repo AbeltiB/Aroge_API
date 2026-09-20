@@ -52,6 +52,12 @@ const envSchema = z.object({
   // Self-hosted GlitchTip DSN (Sentry-API-compatible). Unset disables error
   // tracking entirely — see src/lib/sentry.ts.
   SENTRY_DSN: z.string().optional(),
+
+  // Self-hosted Meilisearch (see infra/README.md) — required, not optional.
+  // Search is a hard runtime dependency now, same as Postgres/Redis, not a
+  // feature that degrades gracefully without it.
+  MEILISEARCH_URL: z.string().min(1, 'MEILISEARCH_URL is required'),
+  MEILISEARCH_API_KEY: z.string().min(1, 'MEILISEARCH_API_KEY is required'),
 }).refine(
   (data) => !data.VERIFY_ET_API_KEY || !!data.VERIFY_ET_WEBHOOK_SECRET,
   {

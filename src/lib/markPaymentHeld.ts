@@ -1,6 +1,7 @@
 import { prisma } from './prisma.js'
 import { notificationQueue, deliveryQueue } from './queue.js'
 import { setOrderListingsStatus } from './orderListings.js'
+import { enqueueSearchSync } from './searchSync.js'
 
 /**
  * Transitions a PENDING payment to HELD and its order to PAID_ESCROWED.
@@ -12,6 +13,8 @@ export async function markPaymentHeld(
   note: string,
   actorId: string | null = null
 ): Promise<void> {
+  let affectedListingIds: string[] = []
+
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
       where: { id: payment.id },
@@ -32,9 +35,11 @@ export async function markPaymentHeld(
     })
     const order = await tx.order.findUnique({ where: { id: payment.orderId } })
     if (order) {
-      await setOrderListingsStatus(tx, order, 'RESERVED')
+      affectedListingIds = await setOrderListingsStatus(tx, order, 'RESERVED')
     }
   })
+
+  for (const listingId of affectedListingIds) void enqueueSearchSync(listingId)
 
   const order = await prisma.order.findUnique({ where: { id: payment.orderId } })
   if (order) {

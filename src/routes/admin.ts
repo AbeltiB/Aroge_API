@@ -7,6 +7,7 @@ import { signedPrivateUrl } from '../lib/storage.js'
 import { ok, err } from '../lib/response.js'
 import { notify } from '../lib/notify.js'
 import { markPaymentHeld } from '../lib/markPaymentHeld.js'
+import { enqueueSearchSync } from '../lib/searchSync.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
@@ -116,6 +117,7 @@ admin.patch('/listings/:id/remove', requireRole(AdminRole.MODERATOR), async (c) 
       data: { adminId, actionType: 'REMOVE_LISTING', targetType: 'listing', targetId: id },
     })
   })
+  void enqueueSearchSync(id)
   return ok(c, null)
 })
 
@@ -139,6 +141,7 @@ admin.patch('/listings/:id/flag',
         data: { adminId, actionType: 'FLAG_LISTING', targetType: 'listing', targetId: id, reason },
       })
     })
+    void enqueueSearchSync(id)
     return ok(c, null)
   }
 )
@@ -157,6 +160,7 @@ admin.patch('/listings/:id/approve', requireRole(AdminRole.MODERATOR), async (c)
       data: { adminId, actionType: 'APPROVE_LISTING', targetType: 'listing', targetId: id },
     })
   })
+  void enqueueSearchSync(id)
   return ok(c, null)
 })
 
@@ -176,6 +180,7 @@ admin.patch('/listings/:id/restore', requireRole(AdminRole.MODERATOR), async (c)
       data: { adminId, actionType: 'RESTORE_LISTING', targetType: 'listing', targetId: id },
     })
   })
+  void enqueueSearchSync(id)
   return ok(c, null)
 })
 

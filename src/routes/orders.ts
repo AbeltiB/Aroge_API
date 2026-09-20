@@ -8,6 +8,7 @@ import { authMiddleware } from '../middleware/auth.js'
 import { createOrderSchema } from '@arogenpm/sdk'
 import { setOrderListingsStatus } from '../lib/orderListings.js'
 import { createOrderFromListing, OrderCreationError } from '../lib/orderCreation.js'
+import { enqueueSearchSync } from '../lib/searchSync.js'
 import type { AuthVariables } from '../middleware/auth.js'
 
 const orders = new Hono<{ Variables: AuthVariables }>()
@@ -138,6 +139,8 @@ orders.patch('/:id/confirm-receipt', async (c) => {
   })
   if (!order) return err(c, 'Order not found or not in escrow', 404)
 
+  let affectedListingIds: string[] = []
+
   await prisma.$transaction(async (tx) => {
     await tx.order.update({
       where: { id: orderId },
@@ -156,8 +159,10 @@ orders.patch('/:id/confirm-receipt', async (c) => {
         note: 'Buyer confirmed receipt',
       },
     })
-    await setOrderListingsStatus(tx, order, 'SOLD')
+    affectedListingIds = await setOrderListingsStatus(tx, order, 'SOLD')
   })
+
+  for (const listingId of affectedListingIds) void enqueueSearchSync(listingId)
 
   void NOTIFY.escrowReleased(order.sellerId, order.amount, orderId)
   void NOTIFY.orderCompleted(order.buyerId, orderId)

@@ -9,6 +9,7 @@ import { adminOnly } from '../middleware/adminOnly.js'
 import { requireRole } from '../middleware/requireRole.js'
 import { setOrderListingsStatus } from '../lib/orderListings.js'
 import { ADMIN_NOTIFY } from '../lib/adminNotify.js'
+import { enqueueSearchSync } from '../lib/searchSync.js'
 import { disputeSchema } from '@arogenpm/sdk'
 import type { AuthVariables } from '../middleware/auth.js'
 
@@ -118,13 +119,15 @@ escrow.post('/orders/:orderId/refund', adminOnly, requireRole(), async (c) => { 
   })
   if (!order) return err(c, 'Order not found or not in dispute', 404)
 
+  let affectedListingIds: string[] = []
+
   await prisma.$transaction(async (tx) => {
     await tx.order.update({
       where: { id: orderId },
       data: { orderStatus: 'REFUNDED' as any, paymentStatus: 'REFUNDED' as any },
     })
     await tx.payment.update({ where: { orderId }, data: { status: 'REFUNDED' as any } })
-    await setOrderListingsStatus(tx, order, 'ACTIVE')
+    affectedListingIds = await setOrderListingsStatus(tx, order, 'ACTIVE')
     await tx.escrowEvent.create({
       data: {
         orderId,
@@ -135,6 +138,8 @@ escrow.post('/orders/:orderId/refund', adminOnly, requireRole(), async (c) => { 
       },
     })
   })
+
+  for (const listingId of affectedListingIds) void enqueueSearchSync(listingId)
 
   await notificationQueue.add('escrow-refunded', {
     userId: order.buyerId,
