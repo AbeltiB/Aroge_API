@@ -11,6 +11,7 @@ import { authRoutes } from './routes/auth.js'
 import { userRoutes } from './routes/users.js'
 import { listingRoutes } from './routes/listings.js'
 import { bundleRoutes } from './routes/bundles.js'
+import { cartRoutes } from './routes/cart.js'
 import { offerRoutes } from './routes/offers.js'
 import { orderRoutes } from './routes/orders.js'
 import { paymentRoutes } from './routes/payments.js'
@@ -74,6 +75,7 @@ api.route('/auth', authRoutes)
 api.route('/users', userRoutes)
 api.route('/listings', listingRoutes)
 api.route('/bundles', bundleRoutes)
+api.route('/cart', cartRoutes)
 api.route('/offers', offerRoutes)
 api.route('/orders', orderRoutes)
 api.route('/payments', paymentRoutes)

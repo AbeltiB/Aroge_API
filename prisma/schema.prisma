@@ -111,6 +111,11 @@ enum OrderSource {
   LIVE
 }
 
+enum BundleSource {
+  SELLER_CURATED
+  CART_CHECKOUT
+}
+
 enum LiveSessionStatus {
   SCHEDULED
   LIVE
@@ -163,6 +168,7 @@ model User {
   receivedMessages Message[]         @relation("ReceivedMessages")
   buyerOffers      Offer[]
   savedItems       SavedItem[]
+  cartItems        CartItem[]
   following        Follow[]          @relation("Follower")
   followers        Follow[]          @relation("Followed")
   notifications    Notification[]
@@ -285,6 +291,7 @@ model Listing {
   orders   Order[]
   messages Message[]
   savedBy  SavedItem[]
+  cartItems CartItem[]
   bundleItems BundleItem[]
   liveItems   LiveItem[]
 
@@ -327,6 +334,13 @@ model Bundle {
   sellerId  String        @map("seller_id")
   price     Float
   status    ListingStatus @default(ACTIVE)
+  // SELLER_CURATED (default) = created ahead of time by the seller via
+  // POST /bundles. CART_CHECKOUT = created on the fly when a buyer's cart
+  // checkout groups 2+ of this seller's items into one order — see
+  // lib/cartCheckout.ts. Lets seller-facing bundle management (GET
+  // /bundles/mine, DELETE /bundles/:id) tell the two apart: a cart-checkout
+  // bundle is a snapshot of an already-placed order, not something to edit.
+  source    BundleSource  @default(SELLER_CURATED) @map("source")
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
@@ -519,6 +533,19 @@ model SavedItem {
 
   @@unique([userId, listingId])
   @@map("saved_items")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  buyerId   String   @map("buyer_id")
+  listingId String   @map("listing_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  buyer   User    @relation(fields: [buyerId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@unique([buyerId, listingId])
+  @@map("cart_items")
 }
 
 model Follow {

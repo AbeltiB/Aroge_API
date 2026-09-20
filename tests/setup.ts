@@ -30,15 +30,35 @@ const {
   sessionReconciliationQueue,
 } = await import('../src/lib/queue.js')
 
-beforeEach(async () => {
+// Fire-and-forget writes from the PREVIOUS test (e.g. notify.ts's
+// `void NOTIFY.orderPlaced(...)`, deliberately not awaited in production
+// code for response latency) can still be in flight when this runs, and
+// occasionally lock the same rows TRUNCATE needs — Postgres reports that as
+// a real deadlock (40P01) or write conflict (40001), not a timeout. Both
+// are transient by construction (that's what "deadlock" means: one of the
+// two conflicting transactions gets killed so the other can proceed) — retry
+// rather than let one confirmed-transient error fail an unrelated test.
+async function truncateAllTables(): Promise<void> {
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public'
   `
   const names = tables.map((t) => `"${t.tablename}"`).join(', ')
-  if (names) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${names} RESTART IDENTITY CASCADE`)
+  if (!names) return
+
+  const RETRYABLE_CODES = new Set(['40P01', '40001'])
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${names} RESTART IDENTITY CASCADE`)
+      return
+    } catch (e: any) {
+      const code = e?.meta?.code ?? e?.code
+      if (attempt === 3 || !RETRYABLE_CODES.has(code)) throw e
+      await new Promise((resolve) => setTimeout(resolve, 50 * attempt))
+    }
   }
-})
+}
+
+beforeEach(truncateAllTables)
 
 afterAll(async () => {
   await Promise.all([

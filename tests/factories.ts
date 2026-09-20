@@ -101,6 +101,10 @@ export async function createOrder(
   return { order, payment }
 }
 
+export async function createCartItem(buyerId: string, listingId: string) {
+  return prisma.cartItem.create({ data: { buyerId, listingId } })
+}
+
 export async function userToken(userId: string, telegramId?: string) {
   return signAccessToken({ sub: userId, telegramId, type: 'user' })
 }

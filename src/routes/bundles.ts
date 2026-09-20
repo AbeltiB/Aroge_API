@@ -22,7 +22,10 @@ const BUNDLE_ITEMS_INCLUDE = {
 bundles.get('/mine', authMiddleware, async (c) => {
   const sellerId = c.get('userId')
   const items = await prisma.bundle.findMany({
-    where: { sellerId },
+    // CART_CHECKOUT bundles are a snapshot of an already-placed order, not
+    // something the seller curated or needs to manage here — they already
+    // see the resulting order in their orders list.
+    where: { sellerId, source: 'SELLER_CURATED' as any },
     include: BUNDLE_ITEMS_INCLUDE,
     orderBy: { createdAt: 'desc' },
   })
@@ -83,6 +86,9 @@ bundles.delete('/:id', async (c) => {
 
   const bundle = await prisma.bundle.findFirst({ where: { id, sellerId } })
   if (!bundle) return err(c, 'Bundle not found', 404)
+  if ((bundle.source as any) === 'CART_CHECKOUT') {
+    return err(c, 'This bundle was created by a cart checkout and cannot be managed here', 400)
+  }
   if (bundle.status !== 'ACTIVE') return err(c, 'Only an active bundle can be cancelled', 400)
 
   await prisma.bundle.update({ where: { id }, data: { status: 'ARCHIVED' } })
