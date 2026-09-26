@@ -4,7 +4,10 @@ FROM node:22-bookworm-slim
 # time — bookworm-slim doesn't ship openssl by default, so without this it
 # silently guesses openssl-1.1.x and can fail to load the query engine at
 # runtime.
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# curl is required by Coolify's container healthcheck, which execs into the
+# running container to hit the health endpoint rather than probing it from
+# outside.
+RUN apt-get update -y && apt-get install -y openssl curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
