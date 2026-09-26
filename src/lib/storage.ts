@@ -75,11 +75,20 @@ export type ResizePreset = keyof typeof RESIZE_PRESETS
 
 /**
  * Builds an imgproxy URL that resizes a public-bucket object on the fly.
- * imgproxy fetches the source itself over the internal docker network
- * (IMGPROXY_ALLOWED_SOURCES restricts it to MinIO's address only) — clients
- * never talk to MinIO directly.
+ * imgproxy fetches the source itself over the internal docker network —
+ * clients never talk to the object store directly.
+ *
+ * Uses an `s3://` source (imgproxy's own S3 client, authenticated with
+ * IMGPROXY_S3_* / AWS_* env vars on the imgproxy container) rather than a
+ * plain unsigned `http://` URL. That was MinIO's model (a bucket could be
+ * marked public-read, so an anonymous GET worked); the self-hosted
+ * replacement (Garage, since MinIO locked its Docker distribution behind a
+ * paywall) always requires a signed/authenticated request on its S3 API,
+ * even for a "public" bucket — confirmed via a real anonymous GET returning
+ * 403. imgproxy authenticating itself sidesteps that entirely and doesn't
+ * depend on the backend's specific public-access model.
  */
 export function publicUrl(key: string, preset: ResizePreset = 'thumb'): string {
-  const source = `${env.MINIO_ENDPOINT}/${env.MINIO_PUBLIC_BUCKET}/${key}`
+  const source = `s3://${env.MINIO_PUBLIC_BUCKET}/${key}`
   return `${env.IMGPROXY_URL}/unsafe/${RESIZE_PRESETS[preset]}/plain/${encodeURIComponent(source)}`
 }
