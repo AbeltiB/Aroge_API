@@ -19,7 +19,13 @@ export async function sendTelegramMessage(chatId: number | string, text: string)
 // Telegram client the user is already logged into. Unlike the Login
 // Widget/oauth.telegram.org page, it doesn't depend on the browser having an
 // active Telegram Web session. Requires the button's URL's domain to be
-// registered via @BotFather → /setdomain (already done for aroge-web.vercel.app).
+// registered via @BotFather → /setdomain for this bot — currently
+// portal.aroge.online (ADMIN_WEB_URL). If ADMIN_WEB_URL's domain ever
+// changes again, /setdomain has to be updated too, by hand, via BotFather —
+// there's no API for it. Telegram silently drops the signed auth data for
+// an unregistered domain (no error, the button just does nothing useful),
+// which is exactly what broke login for everyone after the migration off
+// the old aroge-web.vercel.app domain until this was caught.
 export async function sendLoginButton(chatId: number | string, text: string, loginUrl: string): Promise<void> {
   const res = await fetch(`${API_BASE}/sendMessage`, {
     method: 'POST',
